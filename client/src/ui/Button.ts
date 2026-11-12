@@ -60,6 +60,20 @@ export class Button extends Container {
     this.caption.text = text;
   }
 
+  /** Сменить ширину — адаптация к размеру экрана без пересоздания. */
+  setWidth(width: number): void {
+    this.options.width = width;
+    this.caption.position.set(width / 2, this.options.height / 2);
+    this.draw();
+  }
+
+  /** Сменить высоту — компактные экраны. */
+  setHeight(height: number): void {
+    this.options.height = height;
+    this.caption.position.set(this.options.width / 2, height / 2);
+    this.draw();
+  }
+
   setEnabled(value: boolean): void {
     this.enabled = value;
     this.alpha = value ? 1 : 0.45;

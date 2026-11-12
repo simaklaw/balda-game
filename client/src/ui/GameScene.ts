@@ -8,6 +8,8 @@ import { BoardView } from './BoardView';
 import { Button } from './Button';
 import { HudView } from './HudView';
 import { KeyboardView } from './KeyboardView';
+import { safeInsets } from './safeArea';
+import type { SafeInsets } from './safeArea';
 import { FONT_FAMILY, palette } from '../theme';
 
 export interface GameSceneOptions {
@@ -70,7 +72,7 @@ export class GameScene {
   private readonly btnHistory: Button;
   private readonly btnOk: Button;
   private readonly keyboard: KeyboardView;
-  private readonly controlWidth: number;
+  private controlWidth: number;
   private aiCell: CellPos | null = null;
   private aiTimer: ReturnType<typeof setTimeout> | null = null;
   private aiThinking = false;
@@ -96,6 +98,7 @@ export class GameScene {
     this.selection = new SelectionModel(this.controller.game.board, config.minWordLength, false);
     this.timer = new TimerModel(TIME_PRESETS[options.timeControl]);
 
+    const insets = safeInsets();
     this.inputLayer = new Graphics()
       .rect(0, 0, app.screen.width, app.screen.height)
       .fill({ color: 0xffffff, alpha: 0 });
@@ -105,7 +108,7 @@ export class GameScene {
     this.hud = new HudView(app.screen.width);
     this.view.addChild(this.hud);
 
-    const cellSize = this.computeCellSize(app.screen.width, app.screen.height, options.boardSize);
+    const cellSize = this.computeCellSize(app.screen.width, app.screen.height, options.boardSize, insets);
     this.boardView = new BoardView(options.boardSize, cellSize);
     this.view.addChild(this.boardView);
 
@@ -124,21 +127,22 @@ export class GameScene {
     this.wordPreview.anchor.set(0.5, 0);
     this.view.addChild(this.wordPreview);
 
-    this.controlWidth = Math.min(118, Math.max(74, Math.floor((app.screen.width - 48) / 4)));
+    this.controlWidth = this.computeControlWidth(app.screen.width, insets);
     const controlHeight = 46;
     this.btnCancel = new Button({
       caption: 'Отмена',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
+      fontSize: 16,
       onTap: () => this.onCancel(),
     });
     this.btnPass = new Button({
-      caption: 'Пропустить',
+      caption: 'Пропуск',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
-      fontSize: 15,
+      fontSize: 16,
       onTap: () => this.onPass(),
     });
     this.btnHistory = new Button({
@@ -146,7 +150,7 @@ export class GameScene {
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
-      fontSize: 15,
+      fontSize: 16,
       onTap: () => this.showHistory(),
     });
     this.btnOk = new Button({
@@ -169,41 +173,59 @@ export class GameScene {
     app.stage.on('pointerup', this.stageUp);
     app.stage.on('pointerupoutside', this.stageUp);
     window.addEventListener('resize', this.onResize);
+    document.addEventListener('visibilitychange', this.onVisibility);
 
     this.timer.startTurn(0, performance.now());
     app.ticker.add(this.onTicker);
     this.refresh();
   }
 
-  private computeCellSize(width: number, height: number, boardSize: number): number {
-    const reservedTop = 84;
-    const reservedBottom = 176;
+  private computeCellSize(width: number, height: number, boardSize: number, insets: SafeInsets): number {
+    // Резервы: сверху HUD и часы, снизу клавиатура и панель управления.
+    const reservedTop = 84 + insets.top;
+    const reservedBottom = 216 + insets.bottom;
     const cell = Math.min(
-      Math.floor((width - 20) / boardSize),
+      Math.floor((width - 20 - insets.left - insets.right) / boardSize),
       Math.floor((height - reservedTop - reservedBottom) / boardSize),
     );
     return Math.max(34, Math.min(110, cell));
   }
 
+  private computeControlWidth(width: number, insets: SafeInsets): number {
+    const availW = width - 32 - insets.left - insets.right;
+    return Math.min(118, Math.max(64, Math.floor((availW - 24) / 4)));
+  }
+
   private layout(): void {
+    const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
     this.inputLayer.clear();
     this.inputLayer.rect(0, 0, width, height).fill({ color: 0xffffff, alpha: 0 });
     this.hud.layout(width);
+    this.hud.position.set(0, insets.top);
+    this.controlWidth = this.computeControlWidth(width, insets);
+    this.btnCancel.setWidth(this.controlWidth);
+    this.btnPass.setWidth(this.controlWidth);
+    this.btnHistory.setWidth(this.controlWidth);
+    this.btnOk.setWidth(this.controlWidth);
     const boardPx = this.boardView.boardPixelSize;
-    this.boardView.position.set(Math.floor((width - boardPx) / 2), 84);
-    this.timerText.position.set(width / 2, 60);
-    this.wordPreview.position.set(width / 2, 84 + boardPx + 8);
+    const boardY = 84 + insets.top;
+    this.boardView.position.set(
+      Math.max(insets.left, Math.floor((width - boardPx) / 2)),
+      boardY,
+    );
+    this.timerText.position.set(width / 2, 60 + insets.top);
+    this.wordPreview.position.set(width / 2, boardY + boardPx + 8);
     const gap = 8;
     const total = this.controlWidth * 4 + gap * 3;
-    const controlY = height - 58;
+    const controlY = height - 58 - insets.bottom;
     const startX = Math.floor((width - total) / 2);
     this.btnCancel.position.set(startX, controlY);
     this.btnPass.position.set(startX + (this.controlWidth + gap), controlY);
     this.btnHistory.position.set(startX + (this.controlWidth + gap) * 2, controlY);
     this.btnOk.position.set(startX + (this.controlWidth + gap) * 3, controlY);
-    this.keyboard.position.set(0, height - 64 - this.keyboard.keyboardHeight);
+    this.keyboard.position.set(0, height - 64 - insets.bottom - this.keyboard.keyboardHeight);
   }
 
   private onPointerDown(e: FederatedPointerEvent): void {
@@ -236,6 +258,15 @@ export class GameScene {
 
   private readonly onResize = (): void => {
     this.layout();
+  };
+
+  /**
+   * Сворачивание приложения не должно съедать время: rAF стоит, и после
+   * возврата один «гигантский» тик списал бы весь остаток. Часы
+   * перематываются на момент события — скрытое время не списывается.
+   */
+  private readonly onVisibility = (): void => {
+    this.timer.skipTo(performance.now());
   };
 
   private readonly onTicker = (): void => {
@@ -417,6 +448,7 @@ export class GameScene {
   private showHistory(): void {
     if (this.gameOverShown || this.historyOpen) return;
     this.historyOpen = true;
+    const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
     const history = this.controller.game.history;
@@ -430,7 +462,7 @@ export class GameScene {
     const panelWidth = Math.min(340, width - 40);
     const panelHeight = Math.min(height - 80, 120 + visible.length * lineHeight + 64);
     const panelX = Math.floor((width - panelWidth) / 2);
-    const panelY = Math.max(48, Math.floor((height - panelHeight) / 2));
+    const panelY = Math.max(48 + insets.top, Math.floor((height - panelHeight) / 2));
     const panel = new Graphics()
       .roundRect(panelX, panelY, panelWidth, panelHeight, 16)
       .fill({ color: palette().panel })
@@ -497,6 +529,7 @@ export class GameScene {
     if (this.gameOverShown) return;
     this.gameOverShown = true;
     this.timer.stop();
+    const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
     const overlay = new Container();
@@ -505,7 +538,7 @@ export class GameScene {
     const panelWidth = Math.min(340, width - 40);
     const panelHeight = 280;
     const panelX = Math.floor((width - panelWidth) / 2);
-    const panelY = Math.floor((height - panelHeight) / 2);
+    const panelY = Math.max(48 + insets.top, Math.floor((height - panelHeight) / 2));
     overlay.addChild(
       new Graphics()
         .roundRect(panelX, panelY, panelWidth, panelHeight, 16)
@@ -586,6 +619,7 @@ export class GameScene {
     this.app.stage.off('pointerup', this.stageUp);
     this.app.stage.off('pointerupoutside', this.stageUp);
     window.removeEventListener('resize', this.onResize);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.view.destroy({ children: true });
   }
 }

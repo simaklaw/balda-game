@@ -11,6 +11,9 @@ interface Scene {
   destroy(): void;
 }
 
+/** Цвет фона страницы синхронизируется с темой, чтобы не было вспышек. */
+const cssBackground = (): string => '#' + palette().bg.toString(16).padStart(6, '0');
+
 async function bootstrap(): Promise<void> {
   try {
     const saved = localStorage.getItem('balda.theme');
@@ -28,6 +31,7 @@ async function bootstrap(): Promise<void> {
     autoDensity: true,
   });
   document.body.appendChild(app.canvas);
+  document.body.style.background = cssBackground();
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
 
@@ -67,6 +71,7 @@ async function bootstrap(): Promise<void> {
           }),
         onThemeChange: () => {
           app.renderer.background.color = palette().bg;
+          document.body.style.background = cssBackground();
           showMenu();
         },
       }),

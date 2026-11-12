@@ -1,6 +1,7 @@
 import { Application, Container, Text } from 'pixi.js';
 import type { Difficulty } from '@balda/shared';
 import type { TimeControlKind } from '../game/TimerModel';
+import { safeInsets } from './safeArea';
 import { Button } from './Button';
 import { FONT_FAMILY, palette, setTheme, themeKind } from '../theme';
 
@@ -202,24 +203,82 @@ export class MenuScene {
     this.layout();
   };
 
+  /**
+   * Адаптивная потоковая вёрстка: блоки идут сверху вниз и не наезжают
+   * друг на друга. Ширины кнопок подстраиваются под экран (ряд из четырёх
+   * режимов времени умещается даже на 320px), на маленькой высоте
+   * (ландшафт телефона) меню сжимается, подсказка скрывается.
+   */
   private layout(): void {
+    const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
-    const scale = Math.min(1, height / 640);
-    this.title.position.set(width / 2, 52 * scale);
-    this.subtitle.position.set(width / 2, 100 * scale);
-    const diffY = 150 * scale;
-    this.diffLabel.position.set(width / 2, diffY);
-    this.layoutRow(this.difficultyButtons, ROW_WIDTH, diffY + 28);
-    const sizeY = 252 * scale;
-    this.sizeLabel.position.set(width / 2, sizeY);
-    this.layoutRow(this.sizeButtons, ROW_WIDTH, sizeY + 28);
-    const timeY = 354 * scale;
-    this.timeLabel.position.set(width / 2, timeY);
-    this.layoutRow(this.timeButtons, TIME_ROW_WIDTH, timeY + 28);
-    this.hint.position.set(width / 2, 440 * scale);
-    this.btnTheme.position.set((width - 200) / 2, 496 * scale);
-    this.btnPlay.position.set((width - 220) / 2, 552 * scale);
+    const availH = Math.max(240, height - insets.top - insets.bottom);
+    const availW = Math.max(208, width - insets.left - insets.right - 32);
+    const ultra = availH < 400;
+    const s = Math.min(1, Math.max(0.5, availH / 640));
+
+    const diffW = Math.min(ROW_WIDTH, Math.floor((availW - ROW_GAP * 2) / 3));
+    const timeW = Math.min(TIME_ROW_WIDTH, Math.floor((availW - ROW_GAP * 3) / 4));
+    const rowH = ultra ? 36 : 46;
+    const themeH = ultra ? 36 : 44;
+    const playH = ultra ? 44 : 56;
+    const labelFont = Math.max(13, Math.floor(17 * s));
+    const titleFont = Math.max(30, Math.floor(56 * s));
+    const subFont = Math.max(13, Math.floor(18 * s));
+    const labelH = labelFont + 3;
+    const blockGap = ultra ? 10 : Math.round(18 * s) + 6;
+    const titleBlock = ultra ? titleFont + 4 : titleFont + 6 + subFont + Math.round(16 * s) + 8;
+    const hintH = ultra ? 0 : 36;
+
+    this.title.style.fontSize = titleFont;
+    this.subtitle.style.fontSize = subFont;
+    this.subtitle.visible = !ultra;
+    this.hint.visible = !ultra;
+    for (const label of [this.diffLabel, this.sizeLabel, this.timeLabel]) {
+      label.style.fontSize = labelFont;
+    }
+    for (const button of this.difficultyButtons) button.setWidth(diffW);
+    for (const button of this.sizeButtons) button.setWidth(diffW);
+    for (const button of this.timeButtons) button.setWidth(timeW);
+    for (const group of [this.difficultyButtons, this.sizeButtons, this.timeButtons]) {
+      for (const button of group) button.setHeight(rowH);
+    }
+    this.btnTheme.setHeight(themeH);
+    this.btnPlay.setHeight(playH);
+
+    const totalH = 14 + titleBlock + 3 * (labelH + rowH + blockGap) + hintH + themeH + 12 + playH;
+    let y = insets.top + 14 + Math.max(0, Math.floor((availH - totalH) / 2));
+
+    this.title.position.set(width / 2, y + titleFont / 2);
+    y += titleFont + (ultra ? 4 : 6);
+    if (!ultra) {
+      this.subtitle.position.set(width / 2, y + subFont / 2);
+      y += subFont + Math.round(16 * s) + 8;
+    }
+
+    this.diffLabel.position.set(width / 2, y);
+    y += labelH;
+    this.layoutRow(this.difficultyButtons, diffW, y);
+    y += rowH + blockGap;
+    this.sizeLabel.position.set(width / 2, y);
+    y += labelH;
+    this.layoutRow(this.sizeButtons, diffW, y);
+    y += rowH + blockGap;
+    this.timeLabel.position.set(width / 2, y);
+    y += labelH;
+    this.layoutRow(this.timeButtons, timeW, y);
+    y += rowH + blockGap;
+
+    if (!ultra) {
+      this.hint.position.set(width / 2, y + 2);
+    }
+    y += hintH;
+    this.btnTheme.setWidth(200);
+    this.btnTheme.position.set((width - 200) / 2, y);
+    y += themeH + 12;
+    this.btnPlay.setWidth(220);
+    this.btnPlay.position.set((width - 220) / 2, y);
   }
 
   private layoutRow(buttons: Button[], buttonWidth: number, y: number): void {

@@ -14,14 +14,16 @@ export class KeyboardView extends Container {
 
   constructor(width: number, onLetter: (letter: string) => void) {
     super();
-    const gap = 6;
+    const gap = 5;
     const keyCount = Math.max(...ROWS.map((r) => r.length));
-    const keyWidth = Math.floor((width - gap * (keyCount + 1)) / keyCount);
-    const keyHeight = Math.max(38, Math.floor(keyWidth * 1.2));
-    let y = gap;
+    const keyWidth = Math.max(18, Math.floor((width - gap * (keyCount - 1)) / keyCount));
+    // Высота не масштабируется по ширине на широких экранах, иначе клавиши
+    // перекрывают поле; минимальная высота — крупный тап-таргет.
+    const keyHeight = Math.min(64, Math.max(42, Math.floor(keyWidth * 1.15)));
+    let y = 0;
     for (const row of ROWS) {
       const letters = row.split('');
-      const rowWidth = letters.length * keyWidth + (letters.length + 1) * gap;
+      const rowWidth = letters.length * keyWidth + (letters.length - 1) * gap;
       let x = Math.floor((width - rowWidth) / 2);
       for (const letter of letters) {
         const key = new Button({
@@ -29,7 +31,7 @@ export class KeyboardView extends Container {
           width: keyWidth,
           height: keyHeight,
           color: palette().panel,
-          fontSize: Math.max(15, Math.floor(keyHeight * 0.45)),
+          fontSize: Math.max(15, Math.floor(keyHeight * 0.42)),
           onTap: () => onLetter(letter),
         });
         key.position.set(x, y);
@@ -38,6 +40,6 @@ export class KeyboardView extends Container {
       }
       y += keyHeight + gap;
     }
-    this.keyboardHeight = y;
+    this.keyboardHeight = y - gap;
   }
 }
