@@ -9,6 +9,7 @@
     "dev": "npm run dev --workspace client",
     "test": "vitest run",
     "lint": "eslint .",
+    "build": "npm run build --workspace client",
     "build:dawg": "npm run build:dawg --workspace shared"
   },
   "devDependencies": {
