@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { COLORS, FONT_FAMILY } from '../theme';
+import { FONT_FAMILY, palette } from '../theme';
 
 export interface ButtonOptions {
   caption: string;
@@ -28,7 +28,7 @@ export class Button extends Container {
       style: {
         fontFamily: FONT_FAMILY,
         fontSize: options.fontSize ?? Math.max(14, Math.floor(options.height * 0.42)),
-        fill: options.textColor ?? COLORS.text,
+        fill: options.textColor ?? palette().text,
       },
     });
     this.caption.anchor.set(0.5);
@@ -46,14 +46,18 @@ export class Button extends Container {
     this.bg.clear();
     this.bg
       .roundRect(0, 0, this.options.width, this.options.height, 10)
-      .fill({ color: this.options.color ?? COLORS.accent })
-      .stroke({ width: 2, color: COLORS.panelBorder });
+      .fill({ color: this.options.color ?? palette().accent })
+      .stroke({ width: 2, color: palette().panelBorder });
   }
 
   /** Сменить цвет фона (для выделения выбранной опции). */
   setColor(color: number): void {
     this.options.color = color;
     this.draw();
+  }
+
+  setCaption(text: string): void {
+    this.caption.text = text;
   }
 
   setEnabled(value: boolean): void {

@@ -13,7 +13,7 @@ import type {
 
 /**
  * Партия «Балды»: ходы, пропуск, счёт, история использованных слов,
- * завершение по заполнению поля или лимиту пропусков.
+ * завершение по заполнению поля, лимиту пропусков или времени.
  */
 export class Game {
   readonly config: GameConfig;
@@ -76,6 +76,12 @@ export class Game {
     }
     this.nextTurn();
     return { ok: true };
+  }
+
+  /** Поражение по времени: игрок player превысил лимит часов. */
+  declareTimeout(player: number): void {
+    if (this.status !== 'playing') return;
+    this.finish(player === 0 ? 1 : 0, 'timeout');
   }
 
   private nextTurn(): void {

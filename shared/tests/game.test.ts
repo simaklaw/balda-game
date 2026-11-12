@@ -65,4 +65,14 @@ describe('Game', () => {
     expect(game.endReason).toBe('board_full');
     expect(game.winner).toBe(0);
   });
+
+  it('поражение по времени завершает партию', () => {
+    const game = new Game(Dawg.fromWords(['кот']), cfg3, 'кот');
+    game.declareTimeout(1);
+    expect(game.status).toBe('finished');
+    expect(game.winner).toBe(0);
+    expect(game.endReason).toBe('timeout');
+    game.declareTimeout(0);
+    expect(game.winner).toBe(0);
+  });
 });

@@ -1,6 +1,7 @@
 import { Application, Container, Text } from 'pixi.js';
 import { loadDawg } from './dict/dictionary';
-import { COLORS, FONT_FAMILY } from './theme';
+import { setTheme } from './theme';
+import { FONT_FAMILY, palette } from './theme';
 import { GameScene } from './ui/GameScene';
 import type { GameSceneOptions } from './ui/GameScene';
 import { MenuScene } from './ui/MenuScene';
@@ -11,9 +12,16 @@ interface Scene {
 }
 
 async function bootstrap(): Promise<void> {
+  try {
+    const saved = localStorage.getItem('balda.theme');
+    setTheme(saved === 'light' ? 'light' : 'dark');
+  } catch {
+    setTheme('dark');
+  }
+
   const app = new Application();
   await app.init({
-    background: COLORS.bg,
+    background: palette().bg,
     resizeTo: window,
     antialias: true,
     resolution: Math.min(window.devicePixelRatio || 1, 2),
@@ -25,7 +33,7 @@ async function bootstrap(): Promise<void> {
 
   const loading = new Text({
     text: 'Загрузка словаря…',
-    style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: COLORS.textDim },
+    style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: palette().textDim },
   });
   loading.anchor.set(0.5);
   loading.position.set(window.innerWidth / 2, window.innerHeight / 2);
@@ -51,7 +59,16 @@ async function bootstrap(): Promise<void> {
     setScene(
       new MenuScene(app, {
         onStart: (selection) =>
-          startGame({ dawg, difficulty: selection.difficulty, boardSize: selection.boardSize }),
+          startGame({
+            dawg,
+            difficulty: selection.difficulty,
+            boardSize: selection.boardSize,
+            timeControl: selection.timeControl,
+          }),
+        onThemeChange: () => {
+          app.renderer.background.color = palette().bg;
+          showMenu();
+        },
       }),
     );
   };

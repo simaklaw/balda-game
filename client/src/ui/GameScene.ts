@@ -2,16 +2,19 @@ import { Application, Container, FederatedPointerEvent, Graphics, Text } from 'p
 import type { CellPos, Dawg, Difficulty, MoveErrorCode } from '@balda/shared';
 import { LocalGameController } from '../game/LocalGameController';
 import { SelectionModel } from '../game/SelectionModel';
+import { TIME_PRESETS, TimerModel } from '../game/TimerModel';
+import type { TimeControlKind } from '../game/TimerModel';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
 import { HudView } from './HudView';
 import { KeyboardView } from './KeyboardView';
-import { COLORS, FONT_FAMILY } from '../theme';
+import { FONT_FAMILY, palette } from '../theme';
 
 export interface GameSceneOptions {
   dawg: Dawg;
   difficulty: Difficulty;
   boardSize: 3 | 5;
+  timeControl: TimeControlKind;
 }
 
 export interface GameSceneCallbacks {
@@ -41,7 +44,14 @@ const INITIAL_WORDS: Record<3 | 5, string> = { 3: 'бал', 5: 'балда' };
 
 const AI_MOVE_DELAY_MS = 700;
 
-/** Экран партии: поле, кастомная клавиатура, drag-to-select, ходы против ИИ. */
+function formatClock(ms: number): string {
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+}
+
+/** Экран партии: поле, кастомная клавиатура, drag-to-select, часы, история ходов. */
 export class GameScene {
   readonly view = new Container();
   private readonly app: Application;
@@ -49,12 +59,15 @@ export class GameScene {
   private readonly callbacks: GameSceneCallbacks;
   private readonly controller: LocalGameController;
   private readonly selection: SelectionModel;
+  private readonly timer: TimerModel;
   private readonly inputLayer: Graphics;
   private readonly hud: HudView;
   private readonly boardView: BoardView;
+  private readonly timerText: Text;
   private readonly wordPreview: Text;
   private readonly btnCancel: Button;
   private readonly btnPass: Button;
+  private readonly btnHistory: Button;
   private readonly btnOk: Button;
   private readonly keyboard: KeyboardView;
   private readonly controlWidth: number;
@@ -63,6 +76,8 @@ export class GameScene {
   private aiThinking = false;
   private destroyed = false;
   private dragActive = false;
+  private gameOverShown = false;
+  private historyOpen = false;
 
   constructor(app: Application, options: GameSceneOptions, callbacks: GameSceneCallbacks) {
     this.app = app;
@@ -79,6 +94,7 @@ export class GameScene {
       difficulty: options.difficulty,
     });
     this.selection = new SelectionModel(this.controller.game.board, config.minWordLength, false);
+    this.timer = new TimerModel(TIME_PRESETS[options.timeControl]);
 
     this.inputLayer = new Graphics()
       .rect(0, 0, app.screen.width, app.screen.height)
@@ -93,37 +109,54 @@ export class GameScene {
     this.boardView = new BoardView(options.boardSize, cellSize);
     this.view.addChild(this.boardView);
 
+    this.timerText = new Text({
+      text: '',
+      style: { fontFamily: FONT_FAMILY, fontSize: 15, fill: palette().textDim },
+    });
+    this.timerText.anchor.set(0.5, 0);
+    this.timerText.visible = false;
+    this.view.addChild(this.timerText);
+
     this.wordPreview = new Text({
       text: '',
-      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: COLORS.text },
+      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: palette().text },
     });
     this.wordPreview.anchor.set(0.5, 0);
     this.view.addChild(this.wordPreview);
 
-    this.controlWidth = Math.min(150, Math.max(100, Math.floor((app.screen.width - 40) / 3)));
+    this.controlWidth = Math.min(118, Math.max(74, Math.floor((app.screen.width - 48) / 4)));
     const controlHeight = 46;
     this.btnCancel = new Button({
       caption: 'Отмена',
       width: this.controlWidth,
       height: controlHeight,
-      color: COLORS.panel,
+      color: palette().panel,
       onTap: () => this.onCancel(),
     });
     this.btnPass = new Button({
       caption: 'Пропустить',
       width: this.controlWidth,
       height: controlHeight,
-      color: COLORS.panel,
+      color: palette().panel,
+      fontSize: 15,
       onTap: () => this.onPass(),
+    });
+    this.btnHistory = new Button({
+      caption: 'История',
+      width: this.controlWidth,
+      height: controlHeight,
+      color: palette().panel,
+      fontSize: 15,
+      onTap: () => this.showHistory(),
     });
     this.btnOk = new Button({
       caption: 'OK',
       width: this.controlWidth,
       height: controlHeight,
-      color: COLORS.accent,
+      color: palette().accent,
       onTap: () => this.onSubmit(),
     });
-    this.view.addChild(this.btnCancel, this.btnPass, this.btnOk);
+    this.view.addChild(this.btnCancel, this.btnPass, this.btnHistory, this.btnOk);
 
     this.keyboard = new KeyboardView(app.screen.width, (letter) => this.onLetter(letter));
     this.keyboard.visible = false;
@@ -137,12 +170,14 @@ export class GameScene {
     app.stage.on('pointerupoutside', this.stageUp);
     window.addEventListener('resize', this.onResize);
 
+    this.timer.startTurn(0, performance.now());
+    app.ticker.add(this.onTicker);
     this.refresh();
   }
 
   private computeCellSize(width: number, height: number, boardSize: number): number {
-    const reservedTop = 76;
-    const reservedBottom = 180;
+    const reservedTop = 84;
+    const reservedBottom = 176;
     const cell = Math.min(
       Math.floor((width - 20) / boardSize),
       Math.floor((height - reservedTop - reservedBottom) / boardSize),
@@ -158,18 +193,21 @@ export class GameScene {
     this.hud.layout(width);
     const boardPx = this.boardView.boardPixelSize;
     this.boardView.position.set(Math.floor((width - boardPx) / 2), 84);
+    this.timerText.position.set(width / 2, 60);
     this.wordPreview.position.set(width / 2, 84 + boardPx + 8);
-    const gap = 10;
-    const total = this.controlWidth * 3 + gap * 2;
+    const gap = 8;
+    const total = this.controlWidth * 4 + gap * 3;
     const controlY = height - 58;
-    this.btnCancel.position.set(Math.floor((width - total) / 2), controlY);
-    this.btnPass.position.set(Math.floor((width - total) / 2) + this.controlWidth + gap, controlY);
-    this.btnOk.position.set(Math.floor((width - total) / 2) + (this.controlWidth + gap) * 2, controlY);
+    const startX = Math.floor((width - total) / 2);
+    this.btnCancel.position.set(startX, controlY);
+    this.btnPass.position.set(startX + (this.controlWidth + gap), controlY);
+    this.btnHistory.position.set(startX + (this.controlWidth + gap) * 2, controlY);
+    this.btnOk.position.set(startX + (this.controlWidth + gap) * 3, controlY);
     this.keyboard.position.set(0, height - 64 - this.keyboard.keyboardHeight);
   }
 
   private onPointerDown(e: FederatedPointerEvent): void {
-    if (!this.controller.isHumanTurn || this.aiThinking) return;
+    if (!this.controller.isHumanTurn || this.aiThinking || this.historyOpen) return;
     const local = this.boardView.toLocal(e.global);
     const cell = this.boardView.cellAt(local.x, local.y);
     if (cell === null) return;
@@ -200,8 +238,20 @@ export class GameScene {
     this.layout();
   };
 
+  private readonly onTicker = (): void => {
+    if (this.destroyed || this.gameOverShown) return;
+    const now = performance.now();
+    if (this.historyOpen) {
+      this.timer.skipTo(now);
+      return;
+    }
+    const expired = this.timer.tick(now);
+    this.updateTimerDisplay();
+    if (expired !== null) this.handleExpire(expired);
+  };
+
   private onLetter(letter: string): void {
-    if (!this.controller.isHumanTurn || this.aiThinking) return;
+    if (!this.controller.isHumanTurn || this.aiThinking || this.historyOpen) return;
     if (this.selection.chooseLetter(letter)) {
       this.keyboard.visible = false;
       this.refresh();
@@ -248,34 +298,74 @@ export class GameScene {
 
   private scheduleAi(): void {
     if (this.controller.isFinished) {
+      this.refresh();
       this.showGameOver();
       return;
     }
     if (!this.controller.isAiTurn) return;
+    this.timer.onMoveDone();
+    this.timer.startTurn(1, performance.now());
     this.aiThinking = true;
     this.setControlsEnabled(false);
     this.refresh('Бот думает…');
     this.aiTimer = setTimeout(() => {
       this.aiTimer = null;
-      if (this.destroyed) return;
+      if (this.destroyed || this.gameOverShown) return;
       this.controller.playAiMove();
       this.aiThinking = false;
       const history = this.controller.game.history;
       const last = history.length > 0 ? history[history.length - 1] : null;
       this.aiCell = last !== null && last.player === 1 ? { row: last.cell.row, col: last.cell.col } : null;
+      this.timer.onMoveDone();
+      this.timer.startTurn(0, performance.now());
       if (this.controller.isFinished) {
         this.refresh();
         this.showGameOver();
         return;
       }
-      this.setControlsEnabled(true);
       this.refresh();
     }, AI_MOVE_DELAY_MS);
+  }
+
+  /** Истечение часов: классика — авто-пропуск, блиц/Фишер — поражение по времени. */
+  private handleExpire(player: 0 | 1): void {
+    const kind = this.options.timeControl;
+    if (kind === 'blitz' || kind === 'fisher') {
+      this.controller.game.declareTimeout(player);
+      this.refresh();
+      this.showGameOver();
+      return;
+    }
+    if (player === 0) {
+      this.selection.reset();
+      this.keyboard.visible = false;
+      const result = this.controller.passHuman();
+      if (!result.ok) return;
+      this.timer.refill(0);
+      if (this.controller.isFinished) {
+        this.refresh();
+        this.showGameOver();
+        return;
+      }
+      this.refresh('Время вышло — пропуск хода');
+      this.scheduleAi();
+    } else {
+      const result = this.controller.game.pass(1);
+      if (!result.ok) return;
+      this.timer.refill(1);
+      if (this.controller.isFinished) {
+        this.refresh();
+        this.showGameOver();
+        return;
+      }
+      this.refresh('Бот просрочил ход — пропуск');
+    }
   }
 
   private setControlsEnabled(value: boolean): void {
     this.btnCancel.setEnabled(value && this.selection.snapshot.phase !== 'idle');
     this.btnPass.setEnabled(value);
+    this.btnHistory.setEnabled(value);
     this.btnOk.setEnabled(value && this.selection.canSubmit());
   }
 
@@ -306,45 +396,157 @@ export class GameScene {
     if (this.controller.isHumanTurn && !this.aiThinking) {
       this.btnCancel.setEnabled(snap.phase !== 'idle');
       this.btnPass.setEnabled(true);
+      this.btnHistory.setEnabled(true);
       this.btnOk.setEnabled(this.selection.canSubmit());
     }
+    this.updateTimerDisplay();
+  }
+
+  private updateTimerDisplay(): void {
+    if (!this.timer.enabled) {
+      this.timerText.visible = false;
+      return;
+    }
+    this.timerText.visible = true;
+    const text = 'Вы ' + formatClock(this.timer.getRemaining(0)) + ' · Бот ' + formatClock(this.timer.getRemaining(1));
+    if (this.timerText.text !== text) this.timerText.text = text;
+    const humanLow = this.controller.isHumanTurn && this.timer.getRemaining(0) <= 10000;
+    this.timerText.style.fill = humanLow ? palette().danger : palette().textDim;
+  }
+
+  private showHistory(): void {
+    if (this.gameOverShown || this.historyOpen) return;
+    this.historyOpen = true;
+    const width = this.app.screen.width;
+    const height = this.app.screen.height;
+    const history = this.controller.game.history;
+    const lineHeight = 22;
+    const fontSize = 15;
+    const maxVisible = Math.max(4, Math.floor((height - 280) / lineHeight));
+    const visible = history.slice(-maxVisible);
+    const overlay = new Container();
+    overlay.eventMode = 'static';
+    overlay.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.75 }));
+    const panelWidth = Math.min(340, width - 40);
+    const panelHeight = Math.min(height - 80, 120 + visible.length * lineHeight + 64);
+    const panelX = Math.floor((width - panelWidth) / 2);
+    const panelY = Math.max(48, Math.floor((height - panelHeight) / 2));
+    const panel = new Graphics()
+      .roundRect(panelX, panelY, panelWidth, panelHeight, 16)
+      .fill({ color: palette().panel })
+      .stroke({ width: 2, color: palette().panelBorder });
+    overlay.addChild(panel);
+    const title = new Text({
+      text: 'История ходов',
+      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: palette().text },
+    });
+    title.anchor.set(0.5);
+    title.position.set(width / 2, panelY + 32);
+    overlay.addChild(title);
+    if (visible.length === 0) {
+      const empty = new Text({
+        text: 'Ходов ещё не было',
+        style: { fontFamily: FONT_FAMILY, fontSize, fill: palette().textDim },
+      });
+      empty.anchor.set(0.5);
+      empty.position.set(width / 2, panelY + 76);
+      overlay.addChild(empty);
+    } else {
+      const firstIndex = history.length - visible.length;
+      const body = visible
+        .map(
+          (entry, i) =>
+            firstIndex +
+            i +
+            1 +
+            '. ' +
+            (entry.player === 0 ? 'Вы: ' : 'Бот: ') +
+            entry.word.toUpperCase() +
+            ' (+' +
+            entry.points +
+            ')',
+        )
+        .join('\n');
+      const list = new Text({
+        text: body,
+        style: { fontFamily: FONT_FAMILY, fontSize, fill: palette().text, lineHeight },
+      });
+      list.anchor.set(0.5, 0);
+      list.position.set(width / 2, panelY + 60);
+      overlay.addChild(list);
+    }
+    const btnClose = new Button({
+      caption: 'Закрыть',
+      width: panelWidth - 30,
+      height: 46,
+      color: palette().panel,
+      onTap: () => {
+        this.historyOpen = false;
+        this.view.removeChild(overlay);
+        overlay.destroy({ children: true });
+        this.timer.skipTo(performance.now());
+        this.refresh();
+      },
+    });
+    btnClose.position.set(panelX + 15, panelY + panelHeight - 60);
+    overlay.addChild(btnClose);
+    this.view.addChild(overlay);
   }
 
   private showGameOver(): void {
+    if (this.gameOverShown) return;
+    this.gameOverShown = true;
+    this.timer.stop();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
     const overlay = new Container();
     overlay.eventMode = 'static';
-    const dim = new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.75 });
-    overlay.addChild(dim);
+    overlay.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.75 }));
     const panelWidth = Math.min(340, width - 40);
     const panelHeight = 280;
-    const panelX = (width - panelWidth) / 2;
-    const panelY = (height - panelHeight) / 2;
-    const panel = new Graphics()
-      .roundRect(panelX, panelY, panelWidth, panelHeight, 16)
-      .fill({ color: COLORS.panel })
-      .stroke({ width: 2, color: COLORS.panelBorder });
-    overlay.addChild(panel);
+    const panelX = Math.floor((width - panelWidth) / 2);
+    const panelY = Math.floor((height - panelHeight) / 2);
+    overlay.addChild(
+      new Graphics()
+        .roundRect(panelX, panelY, panelWidth, panelHeight, 16)
+        .fill({ color: palette().panel })
+        .stroke({ width: 2, color: palette().panelBorder }),
+    );
     const game = this.controller.game;
     const human = game.players[0]!.score;
     const ai = game.players[1]!.score;
     const title = game.winner === 0 ? 'Победа!' : game.winner === 1 ? 'Поражение' : 'Ничья';
-    const titleColor = game.winner === 0 ? COLORS.success : game.winner === 1 ? COLORS.danger : COLORS.text;
+    const titleColor =
+      game.winner === 0 ? palette().success : game.winner === 1 ? palette().danger : palette().text;
     const titleText = new Text({
       text: title,
-      style: { fontFamily: FONT_FAMILY, fontSize: 32, fill: titleColor, fontWeight: 'bold' },
+      style: { fontFamily: FONT_FAMILY, fontSize: 32, fill: titleColor },
     });
     titleText.anchor.set(0.5);
     titleText.position.set(width / 2, panelY + 60);
     overlay.addChild(titleText);
     const scoreText = new Text({
       text: human + ' : ' + ai,
-      style: { fontFamily: FONT_FAMILY, fontSize: 28, fill: COLORS.text },
+      style: { fontFamily: FONT_FAMILY, fontSize: 28, fill: palette().text },
     });
     scoreText.anchor.set(0.5);
-    scoreText.position.set(width / 2, panelY + 108);
+    scoreText.position.set(width / 2, panelY + 104);
     overlay.addChild(scoreText);
+    const reasonText =
+      game.endReason === 'timeout'
+        ? 'время вышло'
+        : game.endReason === 'skip_limit'
+          ? 'три пропуска подряд'
+          : '';
+    if (reasonText !== '') {
+      const reason = new Text({
+        text: reasonText,
+        style: { fontFamily: FONT_FAMILY, fontSize: 15, fill: palette().textDim },
+      });
+      reason.anchor.set(0.5);
+      reason.position.set(width / 2, panelY + 134);
+      overlay.addChild(reason);
+    }
     const buttonWidth = panelWidth - 30;
     const btnAgain = new Button({
       caption: 'Ещё раз',
@@ -355,29 +557,31 @@ export class GameScene {
         setTimeout(() => this.callbacks.onRestart(this.options), 0);
       },
     });
-    btnAgain.position.set(panelX + 15, panelY + 150);
+    btnAgain.position.set(panelX + 15, panelY + 156);
     overlay.addChild(btnAgain);
     const btnMenu = new Button({
       caption: 'Меню',
       width: buttonWidth,
       height: 48,
       fontSize: 20,
-      color: COLORS.panel,
+      color: palette().panel,
       onTap: () => {
         setTimeout(() => this.callbacks.onMenu(), 0);
       },
     });
-    btnMenu.position.set(panelX + 15, panelY + 210);
+    btnMenu.position.set(panelX + 15, panelY + 212);
     overlay.addChild(btnMenu);
     this.view.addChild(overlay);
   }
 
   destroy(): void {
     this.destroyed = true;
+    this.timer.stop();
     if (this.aiTimer !== null) {
       clearTimeout(this.aiTimer);
       this.aiTimer = null;
     }
+    this.app.ticker.remove(this.onTicker);
     this.app.stage.off('pointermove', this.stageMove);
     this.app.stage.off('pointerup', this.stageUp);
     this.app.stage.off('pointerupoutside', this.stageUp);

@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import type { CellPos } from '@balda/shared';
-import { COLORS, FONT_FAMILY } from '../theme';
+import { FONT_FAMILY, palette } from '../theme';
 
 export interface BoardHighlight {
   newCell: CellPos | null;
@@ -26,15 +26,15 @@ export class BoardView extends Container {
     const grid = new Graphics();
     grid
       .roundRect(0, 0, this.totalSize(), this.totalSize(), 14)
-      .fill({ color: COLORS.panel })
-      .stroke({ width: 2, color: COLORS.panelBorder });
+      .fill({ color: palette().panel })
+      .stroke({ width: 2, color: palette().panelBorder });
     for (let row = 0; row < boardSize; row++) {
       for (let col = 0; col < boardSize; col++) {
         const { x, y } = this.cellOrigin(row, col);
         grid
           .roundRect(x, y, this.cellSize - 6, this.cellSize - 6, 8)
-          .fill({ color: COLORS.cellEmpty })
-          .stroke({ width: 1, color: COLORS.panelBorder, alpha: 0.7 });
+          .fill({ color: palette().cellEmpty })
+          .stroke({ width: 1, color: palette().panelBorder, alpha: 0.7 });
       }
     }
     this.addChild(grid);
@@ -50,7 +50,7 @@ export class BoardView extends Container {
           style: {
             fontFamily: FONT_FAMILY,
             fontSize: Math.floor(this.cellSize * 0.5),
-            fill: COLORS.letterText,
+            fill: palette().letterText,
           },
         });
         letterView.anchor.set(0.5);
@@ -97,16 +97,16 @@ export class BoardView extends Container {
         const letter = isNew ? (highlight.previewLetter ?? '') : get(row, col);
         view.text = letter.toUpperCase();
         view.visible = letter !== '';
-        view.style.fill = isNew ? COLORS.cellNew : COLORS.letterText;
+        view.style.fill = isNew ? palette().cellNew : palette().letterText;
         const { x, y } = this.cellOrigin(row, col);
         const size = this.cellSize - 6;
         if (isNew) {
           this.overlay
             .roundRect(x, y, size, size, 8)
-            .fill({ color: COLORS.cell, alpha: 0.9 })
-            .stroke({ width: 3, color: COLORS.cellNew });
+            .fill({ color: palette().cell, alpha: 0.9 })
+            .stroke({ width: 3, color: palette().cellNew });
         } else if (inPath(row, col)) {
-          this.overlay.roundRect(x, y, size, size, 8).fill({ color: COLORS.cellPath, alpha: 0.28 });
+          this.overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cellPath, alpha: 0.28 });
         }
         if (
           highlight.aiCell !== null &&
@@ -114,7 +114,7 @@ export class BoardView extends Container {
           highlight.aiCell.col === col &&
           !isNew
         ) {
-          this.overlay.roundRect(x, y, size, size, 8).stroke({ width: 3, color: COLORS.ai });
+          this.overlay.roundRect(x, y, size, size, 8).stroke({ width: 3, color: palette().ai });
         }
       }
     }

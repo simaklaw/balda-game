@@ -1,5 +1,5 @@
 import { Container, Text } from 'pixi.js';
-import { COLORS, FONT_FAMILY } from '../theme';
+import { FONT_FAMILY, palette } from '../theme';
 
 /** Верхняя панель: счёт игрока и бота, строка статуса. */
 export class HudView extends Container {
@@ -11,15 +11,15 @@ export class HudView extends Container {
     super();
     this.humanScore = new Text({
       text: 'Вы: 0',
-      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: COLORS.accent },
+      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: palette().accent },
     });
     this.aiScore = new Text({
       text: 'Бот: 0',
-      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: COLORS.ai },
+      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: palette().ai },
     });
     this.status = new Text({
       text: '',
-      style: { fontFamily: FONT_FAMILY, fontSize: 15, fill: COLORS.textDim },
+      style: { fontFamily: FONT_FAMILY, fontSize: 15, fill: palette().textDim },
     });
     this.addChild(this.humanScore, this.aiScore, this.status);
     this.layout(width);

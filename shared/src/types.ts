@@ -66,4 +66,4 @@ export interface MoveHistoryEntry {
 
 export type GameStatus = 'playing' | 'finished';
 
-export type EndReason = 'board_full' | 'skip_limit' | null;
+export type EndReason = 'board_full' | 'skip_limit' | 'timeout' | null;

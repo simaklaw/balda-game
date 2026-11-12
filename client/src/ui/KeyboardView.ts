@@ -1,6 +1,6 @@
 import { Container } from 'pixi.js';
 import { Button } from './Button';
-import { COLORS } from '../theme';
+import { palette } from '../theme';
 
 const ROWS: readonly string[] = ['йцукенгшщзхъ', 'фывапролджэ', 'ячсмитьбю'];
 
@@ -28,7 +28,7 @@ export class KeyboardView extends Container {
           caption: letter.toUpperCase(),
           width: keyWidth,
           height: keyHeight,
-          color: COLORS.panel,
+          color: palette().panel,
           fontSize: Math.max(15, Math.floor(keyHeight * 0.45)),
           onTap: () => onLetter(letter),
         });
