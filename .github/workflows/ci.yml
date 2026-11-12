@@ -15,5 +15,16 @@ jobs:
           node-version: 20
       - run: npm ci || npm install
       - run: npm run lint --if-present
-      - run: npm test --if-present
+      - name: Test
+        run: |
+          set -o pipefail
+          npm test --if-present 2>&1 | tee /tmp/test.log
+      - name: Test failure details
+        if: failure()
+        run: |
+          LINES=$(wc -l < /tmp/test.log)
+          echo "::notice::test log lines: $LINES"
+          tail -n 400 /tmp/test.log | grep -v '^\s*$' | tail -n 12 | cut -c1-900 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
       - run: npm run build --if-present
