@@ -4,9 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "test": "vitest run"
+    "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
     "@balda/shared": "*",
