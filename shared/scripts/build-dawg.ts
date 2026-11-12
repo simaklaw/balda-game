@@ -14,8 +14,7 @@ if (!inPath || !outPath) {
 }
 
 const words = readFileSync(inPath, 'utf8')
-  .split(/?
-/)
+  .split(/\r?\n/)
   .map((w) => normalizeWord(w.trim()))
   .filter((w) => w.length > 0);
 
