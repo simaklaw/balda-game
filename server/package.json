@@ -1,0 +1,15 @@
+{
+  "name": "@balda/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@balda/shared": "*",
+    "ws": "^8.0.0"
+  }
+}

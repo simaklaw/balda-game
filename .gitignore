@@ -1,0 +1,25 @@
+# Зависимости
+node_modules/
+.pnpm-store/
+
+# Сборка
+dist/
+build/
+*.tsbuildinfo
+
+# Окружение и секреты
+.env
+.env.local
+
+# IDE и ОС
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Тесты и покрытие
+coverage/
+
+# Артефакты словаря (генерируются сборкой)
+shared/dict/*.dawg
+shared/dict/*.bin
