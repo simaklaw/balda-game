@@ -18,6 +18,9 @@ const makeEntry = (overrides: Partial<LeaderboardEntry> = {}): LeaderboardEntry 
   ...overrides,
 });
 
+/** Невалидная запись без проверки типов: для тестов устойчивости к мусору. */
+const makeRaw = (patch: Record<string, unknown>): unknown => ({ ...makeEntry(), ...patch });
+
 describe('parseLeaderboard', () => {
   it('null, пустая строка и мусор дают пустой рейтинг', () => {
     expect(parseLeaderboard(null)).toEqual([]);
@@ -41,10 +44,10 @@ describe('parseLeaderboard', () => {
       makeEntry({ score: 7 }),
       { score: 'много' },
       null,
-      makeEntry({ score: 9, difficulty: 'nightmare' }),
-      makeEntry({ score: 3, boardSize: 7 }),
-      makeEntry({ score: 4, timeControl: 'turbo' }),
-      makeEntry({ score: 2, date: 'вчера' }),
+      makeRaw({ score: 9, difficulty: 'nightmare' }),
+      makeRaw({ score: 3, boardSize: 7 }),
+      makeRaw({ score: 4, timeControl: 'turbo' }),
+      makeRaw({ score: 2, date: 'вчера' }),
     ]);
     const entries = parseLeaderboard(raw);
     expect(entries.map((entry) => entry.score)).toEqual([7]);
