@@ -7,24 +7,25 @@ import { loadDictionary } from './dictionary';
 import { Matchmaker } from './Matchmaker';
 import { parseClientMessage } from './protocol';
 import type { ClientMessage, ServerMessage } from './protocol';
-import { RatingStore } from './RatingStore';
+import { PlayerStore } from './PlayerStore';
 import type { PlayerConnection } from './Room';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const DICT_PATH =
   process.env.DICT_PATH ??
   fileURLToPath(new URL('../../client/public/dict/words.txt', import.meta.url));
-const RATINGS_PATH =
-  process.env.RATINGS_PATH ??
-  fileURLToPath(new URL('../../data/ratings.json', import.meta.url));
+const PLAYERS_PATH =
+  process.env.PLAYERS_PATH ??
+  fileURLToPath(new URL('../../data/players.json', import.meta.url));
 
 const { dawg, size: dictSize, source: dictSource } = loadDictionary(DICT_PATH);
 
-// Рейтинги переживают перезапуск: JSON-файл, атомарная запись при каждой партии.
-const ratingStore = new RatingStore(RATINGS_PATH);
-ratingStore.load();
+// Профили (рейтинг, фишки, статистика) переживают перезапуск:
+// JSON-файл, атомарная запись при каждой партии.
+const playerStore = new PlayerStore(PLAYERS_PATH);
+playerStore.load();
 
-const matchmaker = new Matchmaker(dawg, { ratings: ratingStore });
+const matchmaker = new Matchmaker(dawg, { players: playerStore });
 
 interface Session {
   roomId: string;
@@ -65,7 +66,7 @@ const httpServer = createServer((req, res) => {
       words: dictSize,
       dictSource,
       rooms: matchmaker.roomCount,
-      ratings: ratingStore.size,
+      players: playerStore.size,
     }));
     return;
   }
@@ -193,14 +194,14 @@ wss.on('connection', (socket: WebSocket) => {
 
 httpServer.listen(PORT, () => {
   console.log('[server] словарь: ' + dictSize + ' слов (' + dictSource + ')');
-  console.log('[server] рейтинги: ' + RATINGS_PATH + ' (' + ratingStore.size + ' игроков)');
+  console.log('[server] профили: ' + PLAYERS_PATH + ' (' + playerStore.size + ' игроков)');
   console.log('[server] ws://0.0.0.0:' + PORT + '/ws, health: http://0.0.0.0:' + PORT + '/health');
 });
 
-// Graceful shutdown: сбрасываем рейтинги и таймеры комнат на диск/из памяти.
+// Graceful shutdown: сбрасываем профили на диск и останавливаем таймеры комнат.
 function shutdown(): void {
   matchmaker.dispose();
-  ratingStore.dispose();
+  playerStore.dispose();
   httpServer.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 2000).unref();
 }

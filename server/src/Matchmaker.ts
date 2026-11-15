@@ -1,7 +1,7 @@
 import type { Dawg, GameConfig } from '@balda/shared';
 import { Room } from './Room';
 import type { PlayerConnection, RoomOptions } from './Room';
-import type { RatingStore } from './RatingStore';
+import type { PlayerStore } from './PlayerStore';
 
 /** Код комнаты: только буквы без путаницы (ввод с canvas-клавиатуры). */
 const ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -15,8 +15,8 @@ export interface MatchmakerOptions {
   config?: GameConfig;
   turnMs?: number;
   reconnectMs?: number;
-  /** Постоянное хранилище рейтингов; без него рейтинг живёт в памяти. */
-  ratings?: RatingStore;
+  /** Постоянное хранилище профилей; без него рейтинг живёт в памяти. */
+  players?: PlayerStore;
 }
 
 export interface JoinResult {
@@ -26,7 +26,7 @@ export interface JoinResult {
   index: number;
 }
 
-/** Быстрый матч и приватные комнаты по коду; рейтинг по имени игрока. */
+/** Быстрый матч и приватные комнаты по коду; профиль по имени игрока. */
 export class Matchmaker {
   private dawg: Dawg;
   private options: MatchmakerOptions;
@@ -85,7 +85,7 @@ export class Matchmaker {
   }
 
   private ratingFor(name: string): number {
-    return this.options.ratings?.get(name) ?? this.ratings.get(nameKey(name)) ?? START_RATING;
+    return this.options.players?.get(name)?.rating ?? this.ratings.get(nameKey(name)) ?? START_RATING;
   }
 
   private createRoomObject(): Room {
@@ -115,16 +115,17 @@ export class Matchmaker {
     return room;
   }
 
-  /** Сохранить новые рейтинги игроков завершившейся партии. */
+  /** Сохранить результаты игроков завершившейся партии. */
   private applyRatings(room: Room): void {
     const outcome = room.lastOutcome;
     if (outcome === null) return;
     const names = room.names;
-    const store = this.options.ratings;
+    const winner = room.winnerIndex;
+    const store = this.options.players;
     if (store !== undefined) {
       for (let i = 0; i < names.length && i < outcome.newRatings.length; i++) {
         const name = names[i]!;
-        if (name !== '') store.set(name, outcome.newRatings[i]!);
+        if (name !== '') store.applyResult(name, outcome.newRatings[i]!, winner === i);
       }
       return;
     }
