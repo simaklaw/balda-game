@@ -171,6 +171,11 @@ wss.on('connection', (socket: WebSocket) => {
           sessions.set(socket, { roomId: room.id, playerId: msg.playerId });
           break;
         }
+        case 'profile': {
+          const name = String(msg.name).trim().slice(0, 24);
+          sendTo(socket, { type: 'profile', name, profile: matchmaker.getProfile(name) });
+          break;
+        }
         case 'leave': {
           const session = sessions.get(socket);
           const room = session ? matchmaker.getRoom(session.roomId) : undefined;
@@ -208,3 +213,4 @@ function shutdown(): void {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+

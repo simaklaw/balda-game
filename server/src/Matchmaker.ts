@@ -1,7 +1,7 @@
 import type { Dawg, GameConfig } from '@balda/shared';
 import { Room } from './Room';
 import type { PlayerConnection, RoomOptions } from './Room';
-import type { PlayerStore } from './PlayerStore';
+import type { PlayerRecord, PlayerStore } from './PlayerStore';
 
 /** Код комнаты: только буквы без путаницы (ввод с canvas-клавиатуры). */
 const ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -75,6 +75,11 @@ export class Matchmaker {
   /** Запомненный рейтинг игрока по имени. */
   getRating(name: string): number {
     return this.ratingFor(name);
+  }
+
+  /** Профиль игрока по имени (null — игрок ещё не играл). */
+  getProfile(name: string): PlayerRecord | null {
+    return this.options.players?.get(name) ?? null;
   }
 
   /** Остановить все таймеры всех комнат (для тестов и graceful shutdown). */

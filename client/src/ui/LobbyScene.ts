@@ -2,7 +2,7 @@ import { Application, Container, Graphics, Text } from 'pixi.js';
 import { NetClient } from '../net/NetClient';
 import type { SessionStore } from '../net/NetClient';
 import { detectWsOverride, resolveWsUrl } from '../net/wsUrl';
-import type { RoomState, ServerMessage } from '../net/protocol';
+import type { PlayerProfile, RoomState, ServerMessage } from '../net/protocol';
 import { Button } from './Button';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
@@ -13,9 +13,13 @@ export interface LobbySceneCallbacks {
   onGameStarted: (client: NetClient, state: RoomState) => void;
 }
 
+/** Сколько ждём ответ сервера на запрос профиля. */
+const PROFILE_TIMEOUT_MS = 5000;
+
 /**
- * Онлайн-лобби: быстрый матч, приватная комната по коду, вход по коду.
- * Код вводится на кастомной клавиатуре (только буквы — коды сервера буквы и есть).
+ * Онлайн-лобби: быстрый матч, приватная комната по коду, вход по коду,
+ * профиль игрока. Код вводится на кастомной клавиатуре (только буквы —
+ * коды сервера буквы и есть).
  */
 export class LobbyScene {
   readonly view = new Container();
@@ -28,11 +32,14 @@ export class LobbyScene {
   private readonly btnQuick: Button;
   private readonly btnCreate: Button;
   private readonly btnJoin: Button;
+  private readonly btnProfile: Button;
   private readonly btnBack: Button;
   private net: NetClient | null = null;
   private joining = false;
   private codeOverlay: Container | null = null;
   private codeValue = '';
+  private profileOverlay: Container | null = null;
+  private profileResolve: ((profile: PlayerProfile | null) => void) | null = null;
   private destroyed = false;
 
   constructor(app: Application, playerName: string, store: SessionStore | undefined, callbacks: LobbySceneCallbacks) {
@@ -85,6 +92,14 @@ export class LobbyScene {
       fontSize: 17,
       onTap: () => this.showCodeEntry(),
     });
+    this.btnProfile = new Button({
+      caption: 'Профиль',
+      width: buttonWidth,
+      height: 48,
+      color: palette().panel,
+      fontSize: 17,
+      onTap: () => void this.showProfile(),
+    });
     this.btnBack = new Button({
       caption: 'Назад',
       width: buttonWidth,
@@ -95,7 +110,15 @@ export class LobbyScene {
         setTimeout(() => this.callbacks.onBack(), 0);
       },
     });
-    this.view.addChild(this.title, this.statusText, this.btnQuick, this.btnCreate, this.btnJoin, this.btnBack);
+    this.view.addChild(
+      this.title,
+      this.statusText,
+      this.btnQuick,
+      this.btnCreate,
+      this.btnJoin,
+      this.btnProfile,
+      this.btnBack,
+    );
 
     window.addEventListener('resize', this.onResize);
     this.layout();
@@ -113,9 +136,10 @@ export class LobbyScene {
     this.btnQuick.setWidth(buttonWidth);
     this.btnCreate.setWidth(buttonWidth);
     this.btnJoin.setWidth(buttonWidth);
+    this.btnProfile.setWidth(buttonWidth);
     this.btnBack.setWidth(buttonWidth);
     this.statusText.style.wordWrapWidth = Math.max(240, width - 60);
-    const totalH = 54 + 48 + 48 + 44 + 12 * 3;
+    const totalH = 54 + 48 + 48 + 48 + 44 + 12 * 4;
     let y = insets.top + Math.max(24, Math.floor((height - insets.top - insets.bottom - totalH - 140) / 2));
     this.title.position.set(width / 2, y + 22);
     y += 64;
@@ -124,6 +148,8 @@ export class LobbyScene {
     this.btnCreate.position.set((width - buttonWidth) / 2, y);
     y += 48 + 12;
     this.btnJoin.position.set((width - buttonWidth) / 2, y);
+    y += 48 + 12;
+    this.btnProfile.position.set((width - buttonWidth) / 2, y);
     y += 48 + 12;
     this.btnBack.position.set((width - buttonWidth) / 2, y);
     y += 44 + 18;
@@ -138,6 +164,7 @@ export class LobbyScene {
     this.btnQuick.setEnabled(value);
     this.btnCreate.setEnabled(value);
     this.btnJoin.setEnabled(value);
+    this.btnProfile.setEnabled(value);
   }
 
   private async ensureConnected(): Promise<NetClient | null> {
@@ -202,6 +229,12 @@ export class LobbyScene {
       }
       return;
     }
+    if (msg.type === 'profile') {
+      const resolve = this.profileResolve;
+      this.profileResolve = null;
+      resolve?.(msg.profile);
+      return;
+    }
     if (msg.type === 'error') {
       this.joining = false;
       this.setButtonsEnabled(true);
@@ -224,6 +257,101 @@ export class LobbyScene {
     this.destroyed = true;
     window.removeEventListener('resize', this.onResize);
     setTimeout(() => this.callbacks.onGameStarted(net, state), 0);
+  }
+
+  /** Экран профиля: рейтинг, фишки, статистика партий. */
+  private async showProfile(): Promise<void> {
+    if (this.profileOverlay !== null) return;
+    this.setButtonsEnabled(false);
+    const net = await this.ensureConnected();
+    if (net === null) {
+      this.setButtonsEnabled(true);
+      return;
+    }
+    this.setStatus('Загрузка профиля…');
+    const profile = await new Promise<PlayerProfile | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), PROFILE_TIMEOUT_MS);
+      this.profileResolve = (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      };
+    });
+    this.profileResolve = null;
+    this.setButtonsEnabled(true);
+    if (this.destroyed) return;
+    this.setStatus('');
+    this.openProfileOverlay(profile);
+  }
+
+  private openProfileOverlay(profile: PlayerProfile | null): void {
+    const width = this.app.screen.width;
+    const height = this.app.screen.height;
+    const overlay = new Container();
+    overlay.eventMode = 'static';
+    overlay.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.75 }));
+
+    const panelWidth = Math.min(320, width - 40);
+    const title = new Text({
+      text: 'ПРОФИЛЬ',
+      style: { fontFamily: FONT_FAMILY, fontSize: 26, fill: palette().text },
+    });
+    title.anchor.set(0.5, 0);
+
+    let body: string;
+    if (profile === null) {
+      body = 'Партий пока не было —\nсыграйте онлайн!';
+    } else {
+      const winrate =
+        profile.games > 0 ? Math.round((profile.wins / profile.games) * 100) + '%' : '—';
+      body =
+        'Рейтинг: ' + profile.rating + '\n' +
+        'Фишки: ' + profile.chips + '\n' +
+        'Партии: ' + profile.games + '\n' +
+        'Победы: ' + profile.wins + '\n' +
+        'Винрейт: ' + winrate;
+    }
+    const bodyText = new Text({
+      text: body,
+      style: {
+        fontFamily: FONT_FAMILY,
+        fontSize: 19,
+        fill: palette().text,
+        lineHeight: 30,
+        align: 'center',
+      },
+    });
+    bodyText.anchor.set(0.5, 0);
+
+    const btnClose = new Button({
+      caption: 'Закрыть',
+      width: Math.min(200, panelWidth - 40),
+      height: 48,
+      onTap: () => this.closeProfileOverlay(),
+    });
+
+    const titleH = 40;
+    const bodyH = profile === null ? 70 : 150;
+    const panelH = titleH + bodyH + 48 + 12 * 3;
+    const panel = new Graphics()
+      .roundRect(0, 0, panelWidth, panelH, 16)
+      .fill({ color: palette().bg })
+      .stroke({ width: 2, color: palette().panelBorder });
+    panel.position.set((width - panelWidth) / 2, (height - panelH) / 2);
+    overlay.addChild(panel);
+    title.position.set(width / 2, panel.y + 20);
+    bodyText.position.set(width / 2, panel.y + titleH + 10);
+    btnClose.position.set((width - btnClose.width) / 2, panel.y + panelH - 48 - 12);
+    overlay.addChild(title, bodyText, btnClose);
+
+    this.profileOverlay = overlay;
+    this.view.addChild(overlay);
+  }
+
+  private closeProfileOverlay(): void {
+    if (this.profileOverlay === null) return;
+    this.view.removeChild(this.profileOverlay);
+    this.profileOverlay.destroy({ children: true });
+    this.profileOverlay = null;
   }
 
   /** Ввод кода комнаты на кастомной клавиатуре. */

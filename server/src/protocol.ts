@@ -25,6 +25,14 @@ export interface RoomState {
   you: number;
 }
 
+/** Публичный профиль игрока (без приватных данных). */
+export interface PlayerProfile {
+  rating: number;
+  chips: number;
+  games: number;
+  wins: number;
+}
+
 export type ClientMessage =
   | { type: 'quick-match'; name: string }
   | { type: 'create-room'; name: string }
@@ -32,7 +40,8 @@ export type ClientMessage =
   | { type: 'move'; path: CellPos[]; cell: CellPos; letter: string }
   | { type: 'pass' }
   | { type: 'reconnect'; roomId: string; playerId: string; token: string }
-  | { type: 'leave' };
+  | { type: 'leave' }
+  | { type: 'profile'; name: string };
 
 export type ServerMessage =
   | {
@@ -52,7 +61,8 @@ export type ServerMessage =
       reason: EndReason;
       deltaRating: number[];
       deltaChips: number[];
-    };
+    }
+  | { type: 'profile'; name: string; profile: PlayerProfile | null };
 
 const CLIENT_TYPES: ReadonlySet<string> = new Set([
   'quick-match',
@@ -62,6 +72,7 @@ const CLIENT_TYPES: ReadonlySet<string> = new Set([
   'pass',
   'reconnect',
   'leave',
+  'profile',
 ]);
 
 /** Разбор входящего сообщения; возвращает null для мусора. */

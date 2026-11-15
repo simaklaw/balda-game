@@ -1,7 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Dawg } from '@balda/shared';
 import type { GameConfig } from '@balda/shared';
 import { Matchmaker } from '../src/Matchmaker';
+import { PlayerStore } from '../src/PlayerStore';
 import { Room } from '../src/Room';
 import type { PlayerConnection } from '../src/Room';
 import type { ServerMessage } from '../src/protocol';
@@ -217,4 +221,24 @@ describe('Matchmaker', () => {
     expect(mm.getRating('Проигравший')).toBeLessThan(1000);
     mm.dispose();
   });
+
+  it('профиль после партии содержит фишки и победы', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'balda-pp-'));
+    const store = new PlayerStore(join(dir, 'players.json'));
+    store.load();
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0, players: store });
+    expect(mm.getProfile('Победитель')).toBeNull();
+    const host = mm.createRoom(new FakeConn(), 'Победитель');
+    const guest = mm.joinRoom(host.room.id, new FakeConn(), 'Проигравший');
+    host.room.leave(guest!.playerId);
+    const winner = mm.getProfile('Победитель');
+    expect(winner).not.toBeNull();
+    expect(winner!.games).toBe(1);
+    expect(winner!.wins).toBe(1);
+    expect(winner!.chips).toBe(10);
+    expect(mm.getProfile('Неизвестный')).toBeNull();
+    mm.dispose();
+    store.dispose();
+  });
 });
+
