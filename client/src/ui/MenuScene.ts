@@ -1,4 +1,4 @@
-import { Application, Container, Text } from 'pixi.js';
+import { Application, Container, Graphics, Text } from 'pixi.js';
 import type { Difficulty } from '@balda/shared';
 import type { TimeControlKind } from '../game/TimerModel';
 import { safeInsets } from './safeArea';
@@ -35,11 +35,18 @@ const TIME_CONTROLS: readonly { id: TimeControlKind; caption: string }[] = [
   { id: 'fisher', caption: 'Фишер' },
 ];
 
+const RULES_TEXT =
+  '1. Коснитесь пустой клетки рядом с буквами и выберите букву.\n' +
+  '2. Составьте слово из соседних букв — цепочка должна проходить через новую букву.\n' +
+  '3. Отпустите палец или нажмите OK. Очки равны длине слова.\n' +
+  '4. Только нарицательные существительные в единственном числе: от 3 букв на поле 3×3, от 4 — на 5×5. Повторять слова нельзя.\n' +
+  '5. Три пропуска подряд завершают партию. В блице и Фишере просрочка часов — поражение.';
+
 const ROW_WIDTH = 104;
 const TIME_ROW_WIDTH = 88;
 const ROW_GAP = 12;
 
-/** Экран главного меню: сложность, поле, контроль времени и тема. */
+/** Экран главного меню: сложность, поле, контроль времени, правила и тема. */
 export class MenuScene {
   readonly view = new Container();
   private readonly app: Application;
@@ -54,6 +61,7 @@ export class MenuScene {
   private readonly sizeButtons: Button[] = [];
   private readonly timeButtons: Button[] = [];
   private readonly btnTheme: Button;
+  private readonly btnRules: Button;
   private readonly btnPlay: Button;
   private difficulty: Difficulty = 'medium';
   private boardSize: 3 | 5 = 5;
@@ -175,6 +183,16 @@ export class MenuScene {
     });
     this.view.addChild(this.btnTheme);
 
+    this.btnRules = new Button({
+      caption: 'Правила',
+      width: 200,
+      height: 44,
+      color: palette().panel,
+      fontSize: 16,
+      onTap: () => this.showRules(),
+    });
+    this.view.addChild(this.btnRules);
+
     this.btnPlay = new Button({
       caption: 'Играть',
       width: 220,
@@ -203,6 +221,60 @@ export class MenuScene {
     this.layout();
   };
 
+  /** Панель с правилами игры. */
+  private showRules(): void {
+    const insets = safeInsets();
+    const width = this.app.screen.width;
+    const height = this.app.screen.height;
+    const overlay = new Container();
+    overlay.eventMode = 'static';
+    overlay.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.75 }));
+    const panelWidth = Math.min(360, width - 40);
+    const panelX = Math.floor((width - panelWidth) / 2);
+    const panelY = Math.max(48 + insets.top, Math.floor((height - 340) / 2));
+    const panel = new Graphics();
+    overlay.addChild(panel);
+    const title = new Text({
+      text: 'Как играть',
+      style: { fontFamily: FONT_FAMILY, fontSize: 22, fill: palette().text },
+    });
+    title.anchor.set(0.5);
+    title.position.set(width / 2, panelY + 34);
+    overlay.addChild(title);
+    const body = new Text({
+      text: RULES_TEXT,
+      style: {
+        fontFamily: FONT_FAMILY,
+        fontSize: 14,
+        fill: palette().text,
+        wordWrap: true,
+        wordWrapWidth: panelWidth - 44,
+        lineHeight: 20,
+      },
+    });
+    body.anchor.set(0.5, 0);
+    body.position.set(width / 2, panelY + 62);
+    overlay.addChild(body);
+    const panelHeight = Math.min(height - 80, 62 + Math.ceil(body.height) + 66);
+    panel
+      .roundRect(panelX, panelY, panelWidth, panelHeight, 16)
+      .fill({ color: palette().panel })
+      .stroke({ width: 2, color: palette().panelBorder });
+    const btnClose = new Button({
+      caption: 'Понятно',
+      width: panelWidth - 44,
+      height: 46,
+      color: palette().accent,
+      onTap: () => {
+        this.view.removeChild(overlay);
+        overlay.destroy({ children: true });
+      },
+    });
+    btnClose.position.set(panelX + 22, panelY + panelHeight - 58);
+    overlay.addChild(btnClose);
+    this.view.addChild(overlay);
+  }
+
   /**
    * Адаптивная потоковая вёрстка: блоки идут сверху вниз и не наезжают
    * друг на друга. Ширины кнопок подстраиваются под экран (ряд из четырёх
@@ -222,6 +294,7 @@ export class MenuScene {
     const timeW = Math.min(TIME_ROW_WIDTH, Math.floor((availW - ROW_GAP * 3) / 4));
     const rowH = ultra ? 36 : 46;
     const themeH = ultra ? 36 : 44;
+    const rulesH = ultra ? 36 : 44;
     const playH = ultra ? 44 : 56;
     const labelFont = Math.max(13, Math.floor(17 * s));
     const titleFont = Math.max(30, Math.floor(56 * s));
@@ -245,9 +318,10 @@ export class MenuScene {
       for (const button of group) button.setHeight(rowH);
     }
     this.btnTheme.setHeight(themeH);
+    this.btnRules.setHeight(rulesH);
     this.btnPlay.setHeight(playH);
 
-    const totalH = 14 + titleBlock + 3 * (labelH + rowH + blockGap) + hintH + themeH + 12 + playH;
+    const totalH = 14 + titleBlock + 3 * (labelH + rowH + blockGap) + hintH + themeH + 10 + rulesH + 12 + playH;
     let y = insets.top + 14 + Math.max(0, Math.floor((availH - totalH) / 2));
 
     this.title.position.set(width / 2, y + titleFont / 2);
@@ -276,7 +350,10 @@ export class MenuScene {
     y += hintH;
     this.btnTheme.setWidth(200);
     this.btnTheme.position.set((width - 200) / 2, y);
-    y += themeH + 12;
+    y += themeH + 10;
+    this.btnRules.setWidth(200);
+    this.btnRules.position.set((width - 200) / 2, y);
+    y += rulesH + 12;
     this.btnPlay.setWidth(220);
     this.btnPlay.position.set((width - 220) / 2, y);
   }

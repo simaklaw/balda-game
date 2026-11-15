@@ -7,9 +7,27 @@ export interface BoardHighlight {
   previewLetter: string | null;
   path: CellPos[];
   aiCell: CellPos | null;
+  /** Полный путь последнего хода бота. */
+  aiPath: CellPos[];
+  /** Подсказка «+» на пустых клетках, куда можно ставить букву. */
+  showPlaceable: boolean;
 }
 
-const NO_HIGHLIGHT: BoardHighlight = { newCell: null, previewLetter: null, path: [], aiCell: null };
+const NO_HIGHLIGHT: BoardHighlight = {
+  newCell: null,
+  previewLetter: null,
+  path: [],
+  aiCell: null,
+  aiPath: [],
+  showPlaceable: false,
+};
+
+const ORTHO_DIRS: ReadonlyArray<readonly [number, number]> = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+];
 
 /** Отрисовка поля: сетка, буквы и подсветки выделения. */
 export class BoardView extends Container {
@@ -84,11 +102,19 @@ export class BoardView extends Container {
     return { row, col };
   }
 
+  /** Масштаб буквы клетки (анимация появления). */
+  setPulse(row: number, col: number, scale: number): void {
+    const view = this.letterViews[row]?.[col];
+    if (view !== undefined) view.scale.set(scale);
+  }
+
   /** Обновить буквы и подсветки: get возвращает букву клетки ('' — пустая). */
   sync(get: (row: number, col: number) => string, highlight: BoardHighlight = NO_HIGHLIGHT): void {
     this.overlay.clear();
     const inPath = (row: number, col: number): boolean =>
       highlight.path.some((c) => c.row === row && c.col === col);
+    const inAiPath = (row: number, col: number): boolean =>
+      highlight.aiPath.some((c) => c.row === row && c.col === col);
     for (let row = 0; row < this.boardSize; row++) {
       for (let col = 0; col < this.boardSize; col++) {
         const view = this.letterViews[row]![col]!;
@@ -115,8 +141,45 @@ export class BoardView extends Container {
           !isNew
         ) {
           this.overlay.roundRect(x, y, size, size, 8).stroke({ width: 3, color: palette().ai });
+        } else if (inAiPath(row, col) && !isNew) {
+          this.overlay
+            .roundRect(x, y, size, size, 8)
+            .stroke({ width: 2, color: palette().ai, alpha: 0.6 });
+        }
+        if (
+          highlight.showPlaceable &&
+          letter === '' &&
+          !isNew &&
+          this.hasLetteredNeighbor(get, row, col)
+        ) {
+          this.overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cell, alpha: 0.4 });
+          const cx = x + size / 2;
+          const cy = y + size / 2;
+          const arm = Math.max(7, Math.floor(size * 0.16));
+          this.overlay
+            .rect(cx - arm, cy - 2, arm * 2, 4)
+            .fill({ color: palette().textDim, alpha: 0.55 });
+          this.overlay
+            .rect(cx - 2, cy - arm, 4, arm * 2)
+            .fill({ color: palette().textDim, alpha: 0.55 });
         }
       }
     }
+  }
+
+  /** Соседняя по ортогонали непустая клетка (в нашей конфигурации диагоналей нет). */
+  private hasLetteredNeighbor(
+    get: (row: number, col: number) => string,
+    row: number,
+    col: number,
+  ): boolean {
+    for (const [dr, dc] of ORTHO_DIRS) {
+      const r = row + dr;
+      const c = col + dc;
+      if (r >= 0 && c >= 0 && r < this.boardSize && c < this.boardSize && get(r, c) !== '') {
+        return true;
+      }
+    }
+    return false;
   }
 }

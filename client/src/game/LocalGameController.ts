@@ -1,10 +1,20 @@
 import { Game, findAiMove } from '@balda/shared';
-import type { Dawg, Difficulty, GameConfig, MoveInput, MoveResult } from '@balda/shared';
+import type { CellPos, Dawg, Difficulty, GameConfig, MoveInput, MoveResult } from '@balda/shared';
 
 export interface AiConfig {
   difficulty: Difficulty;
   /** Инъекция генератора случайных чисел (для тестов). */
   rng?: () => number;
+}
+
+export interface AiMoveOutcome {
+  moved: boolean;
+  word?: string;
+  points?: number;
+  /** Клетка новой буквы — для подсветки хода бота. */
+  cell?: CellPos;
+  /** Полный путь слова бота — для подсветки хода бота. */
+  path?: CellPos[];
 }
 
 /** Оффлайн-партия: игрок 0 — человек, игрок 1 — ИИ. */
@@ -45,7 +55,7 @@ export class LocalGameController {
   }
 
   /** Ход ИИ; при отсутствии вариантов — авто-пропуск. */
-  playAiMove(): { moved: boolean; word?: string; points?: number } {
+  playAiMove(): AiMoveOutcome {
     if (!this.isAiTurn) return { moved: false };
     const candidate = findAiMove(
       this.game.board,
@@ -65,6 +75,14 @@ export class LocalGameController {
       path: candidate.path,
       player: 1,
     });
-    return result.ok ? { moved: true, word: result.word, points: result.points } : { moved: false };
+    return result.ok
+      ? {
+          moved: true,
+          word: result.word,
+          points: result.points,
+          cell: candidate.cell,
+          path: candidate.path,
+        }
+      : { moved: false };
   }
 }

@@ -46,6 +46,10 @@ const ERROR_TEXT: Record<MoveErrorCode, string> = {
 const INITIAL_WORDS: Record<3 | 5, string> = { 3: 'бал', 5: 'балда' };
 
 const AI_MOVE_DELAY_MS = 700;
+/** Сколько показывать ход бота (подсветка пути + слово в статусе). */
+const AI_REVEAL_MS = 900;
+const POP_MS = 180;
+const SHAKE_MS = 320;
 
 function formatClock(ms: number): string {
   const totalSeconds = Math.ceil(ms / 1000);
@@ -75,12 +79,19 @@ export class GameScene {
   private readonly keyboard: KeyboardView;
   private controlWidth: number;
   private aiCell: CellPos | null = null;
+  private aiPath: CellPos[] = [];
   private aiTimer: ReturnType<typeof setTimeout> | null = null;
   private aiThinking = false;
   private destroyed = false;
   private dragActive = false;
+  private dragMoved = false;
   private gameOverShown = false;
   private historyOpen = false;
+  private boardX = 0;
+  private popCell: CellPos | null = null;
+  private popStart = 0;
+  private shakeActive = false;
+  private shakeStart = 0;
 
   constructor(app: Application, options: GameSceneOptions, callbacks: GameSceneCallbacks) {
     this.app = app;
@@ -212,10 +223,8 @@ export class GameScene {
     this.btnOk.setWidth(this.controlWidth);
     const boardPx = this.boardView.boardPixelSize;
     const boardY = 84 + insets.top;
-    this.boardView.position.set(
-      Math.max(insets.left, Math.floor((width - boardPx) / 2)),
-      boardY,
-    );
+    this.boardX = Math.max(insets.left, Math.floor((width - boardPx) / 2));
+    this.boardView.position.set(this.boardX, boardY);
     this.timerText.position.set(width / 2, 60 + insets.top);
     this.wordPreview.position.set(width / 2, boardY + boardPx + 8);
     const gap = 8;
@@ -250,11 +259,19 @@ export class GameScene {
     const local = this.boardView.toLocal(e.global);
     const cell = this.boardView.cellAt(local.x, local.y);
     if (cell === null) return;
-    if (this.selection.extendPath(cell.row, cell.col)) this.refresh();
+    if (this.selection.extendPath(cell.row, cell.col)) {
+      this.dragMoved = true;
+      this.refresh();
+    }
   };
 
   private readonly stageUp = (): void => {
+    const wasDragging = this.dragActive;
+    const moved = this.dragMoved;
     this.dragActive = false;
+    this.dragMoved = false;
+    // Обвёл слово пальцем и отпустил — слово отправляется сразу, без OK.
+    if (wasDragging && moved && this.selection.canSubmit()) this.onSubmit();
   };
 
   private readonly onResize = (): void => {
@@ -280,6 +297,16 @@ export class GameScene {
     const expired = this.timer.tick(now);
     this.updateTimerDisplay();
     if (expired !== null) this.handleExpire(expired);
+    if (this.popCell !== null) {
+      const t = (now - this.popStart) / POP_MS;
+      if (t >= 1) {
+        this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
+        this.popCell = null;
+      } else {
+        const scale = 1 + 0.16 * Math.sin(Math.PI * t);
+        this.boardView.setPulse(this.popCell.row, this.popCell.col, scale);
+      }
+    }
   };
 
   private onLetter(letter: string): void {
@@ -313,17 +340,21 @@ export class GameScene {
     if (!this.controller.isHumanTurn || this.aiThinking) return;
     const move = this.selection.toMove();
     if (move === null) {
+      this.shakeBoard();
       this.refresh('Выделите слово, включая новую букву');
       return;
     }
     const result = this.controller.applyHumanMove(move);
     if (!result.ok) {
+      this.shakeBoard();
       this.refresh(ERROR_TEXT[result.error ?? 'GAME_FINISHED']);
       return;
     }
     this.selection.reset();
     this.keyboard.visible = false;
     this.aiCell = null;
+    this.aiPath = [];
+    this.startPop(move.cell);
     this.refresh();
     this.scheduleAi();
   }
@@ -343,11 +374,8 @@ export class GameScene {
     this.aiTimer = setTimeout(() => {
       this.aiTimer = null;
       if (this.destroyed || this.gameOverShown) return;
-      this.controller.playAiMove();
+      const outcome = this.controller.playAiMove();
       this.aiThinking = false;
-      const history = this.controller.game.history;
-      const last = history.length > 0 ? history[history.length - 1] : null;
-      this.aiCell = last !== null && last.player === 1 ? { row: last.cell.row, col: last.cell.col } : null;
       this.timer.onMoveDone();
       this.timer.startTurn(0, performance.now());
       if (this.controller.isFinished) {
@@ -355,7 +383,23 @@ export class GameScene {
         this.showGameOver();
         return;
       }
-      this.refresh();
+      if (outcome.moved && outcome.cell !== undefined && outcome.path !== undefined) {
+        // Показываем ход бота: подсветка пути, слово в статусе, pop буквы.
+        this.aiCell = { row: outcome.cell.row, col: outcome.cell.col };
+        this.aiPath = outcome.path;
+        this.startPop(outcome.cell);
+        this.refresh('Бот: ' + (outcome.word ?? '').toUpperCase() + ' (+' + (outcome.points ?? 0) + ')');
+        this.aiTimer = setTimeout(() => {
+          this.aiTimer = null;
+          if (this.destroyed || this.gameOverShown) return;
+          this.aiPath = [];
+          this.refresh();
+        }, AI_REVEAL_MS);
+        return;
+      }
+      this.aiCell = null;
+      this.aiPath = [];
+      this.refresh('Бот пропустил ход');
     }, AI_MOVE_DELAY_MS);
   }
 
@@ -412,7 +456,7 @@ export class GameScene {
     } else if (!this.controller.isHumanTurn) {
       status = 'Ход бота…';
     } else if (snap.phase === 'idle') {
-      status = 'Ваш ход: коснитесь пустой клетки';
+      status = 'Ваш ход: коснитесь клетки с «+»';
     } else if (snap.phase === 'choosingLetter') {
       status = 'Выберите букву';
     } else {
@@ -420,10 +464,17 @@ export class GameScene {
     }
     this.hud.update(game.players[0]!.score, game.players[1]!.score, status);
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
-    this.wordPreview.text = word.toUpperCase();
+    this.wordPreview.text = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
     this.boardView.sync(
       (row, col) => game.board.get(row, col),
-      { newCell: snap.newCell, previewLetter: snap.previewLetter, path: snap.path, aiCell: this.aiCell },
+      {
+        newCell: snap.newCell,
+        previewLetter: snap.previewLetter,
+        path: snap.path,
+        aiCell: this.aiCell,
+        aiPath: this.aiPath,
+        showPlaceable: this.controller.isHumanTurn && !this.aiThinking && snap.phase === 'idle',
+      },
     );
     if (this.controller.isHumanTurn && !this.aiThinking) {
       this.btnCancel.setEnabled(snap.phase !== 'idle');
@@ -445,6 +496,31 @@ export class GameScene {
     const humanLow = this.controller.isHumanTurn && this.timer.getRemaining(0) <= 10000;
     this.timerText.style.fill = humanLow ? palette().danger : palette().textDim;
   }
+
+  private startPop(cell: CellPos): void {
+    this.popCell = { row: cell.row, col: cell.col };
+    this.popStart = performance.now();
+  }
+
+  /** Тряска поля при неверном слове. */
+  private shakeBoard(): void {
+    if (this.shakeActive || this.destroyed) return;
+    this.shakeActive = true;
+    this.shakeStart = performance.now();
+    this.app.ticker.add(this.shakeTicker);
+  }
+
+  private readonly shakeTicker = (): void => {
+    const t = performance.now() - this.shakeStart;
+    if (t >= SHAKE_MS || this.destroyed) {
+      this.shakeActive = false;
+      this.app.ticker.remove(this.shakeTicker);
+      if (!this.destroyed) this.boardView.position.x = this.boardX;
+      return;
+    }
+    const amplitude = 5 * (1 - t / SHAKE_MS);
+    this.boardView.position.x = this.boardX + Math.sin(t / 28) * amplitude;
+  };
 
   private showHistory(): void {
     if (this.gameOverShown || this.historyOpen) return;
@@ -700,6 +776,10 @@ export class GameScene {
     if (this.aiTimer !== null) {
       clearTimeout(this.aiTimer);
       this.aiTimer = null;
+    }
+    if (this.shakeActive) {
+      this.shakeActive = false;
+      this.app.ticker.remove(this.shakeTicker);
     }
     this.app.ticker.remove(this.onTicker);
     this.app.stage.off('pointermove', this.stageMove);
