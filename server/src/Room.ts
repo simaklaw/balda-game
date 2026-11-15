@@ -273,7 +273,9 @@ export class Room {
         connected: s !== null && s.conn !== null,
       })),
       currentPlayer: this.game.currentPlayer,
-      status: this.isFull ? this.game.status : 'waiting',
+      // Завершённая партия остаётся 'finished' даже после выхода игрока;
+      // 'waiting' — только для ещё не начавшейся комнаты.
+      status: !this.isFull && !this.isFinished ? 'waiting' : this.game.status,
       history: [...this.game.history],
       winner: this.game.winner,
       endReason: this.game.endReason,
