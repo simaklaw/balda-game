@@ -1,0 +1,14 @@
+services:
+  balda-server:
+    build: .
+    image: balda-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      # Словарь лежит в образе; при желании можно смонтировать свой:
+      # DICT_PATH: /dict/words.txt
+      PLAYERS_PATH: /data/players.json
+    volumes:
+      - ./data:/data
