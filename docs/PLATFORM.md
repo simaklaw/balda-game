@@ -8,7 +8,7 @@
 
 ```ts
 interface PlatformAdapter {
-  readonly id: 'web' | 'yandex';
+  readonly id: 'web' | 'yandex' | 'vk';
   ready(): Promise<void>;              // «игра загрузилась» (требование Яндекс Игр)
   getPlayerName(): Promise<string | null>;
   showInterstitial(): Promise<void>;   // межстраничная реклама, резолв после закрытия
@@ -25,13 +25,29 @@ interface PlatformAdapter {
 | --- | --- | --- |
 | `web.ts` | Просто браузер | localStorage, без рекламы и авторизации |
 | `yandex.ts` | Яндекс Игры | SDK `/sdk.js`, LoadingAPI.ready, реклама, игрок, облачные сейвы |
+| `vk.ts` | VK Mini Apps | vk-bridge: VKWebAppInit, VKWebAppGetUserInfo, VKWebAppStorage, VKWebAppShowNativeAds |
 
 ## Выбор платформы (`index.ts`)
 
-`createAdapter()` смотрит на URL (`yandex`, `ysdk`, `ya.ru`) и user-agent
-(`YaApp` — мобильное приложение; просто YaBrowser считается вебом). Если
-платформа яндексовская, подгружается `/sdk.js` — при любом сбое молча
-откатываемся на `WebAdapter`, игра никогда не падает из-за площадки.
+`createAdapter()` смотрит на URL и user-agent: Яндекса — (`yandex`, `ysdk`,
+`ya.ru`, UA `YaApp`; просто YaBrowser считается вебом), VK — (`vk_app_id` в URL
+запуска мини-аппа, ссылки `vk.com` / `vk.ru`). Яндексовский SDK подгружается
+скриптом, vk-bridge — динамическим импортом (отдельный чанк, грузится только
+внутри VK). При любом сбое молча откатываемся на `WebAdapter` — игра никогда
+не падает из-за площадки.
+
+## VK Mini Apps (`vk.ts`)
+
+- `ready()` → `VKWebAppInit` (обязательное событие запуска мини-аппа).
+- `getPlayerName()` → `VKWebAppGetUserInfo`, имя + фамилия; сбой → null.
+- Хранилище → `VKWebAppStorageGet/Set` (облачное), при сбое — фолбэк на
+  `localStorage`. Удаления в VK Storage нет: `remove()` записывает пустую
+  строку, а `get()` читает пустую строку как «ключа нет» (null).
+- `showInterstitial()` → `VKWebAppShowNativeAds` с `ad_format: 'interstitial'`;
+  страховочный таймаут 20 с, зависнуть игра не может.
+
+Публикация черновика VK-аппа — через vk.com/editapp?act=settings (см. задачу
+в ROADMAP, Этап 3).
 
 ## Реклама
 
@@ -43,13 +59,14 @@ interface PlatformAdapter {
 
 ## Хранилище
 
-На Яндексе — `player.getData/setData` (облачные сейвы игрока), при сбое или
-неавторизованном игроке — фолбэк на `localStorage`. Удаление ключа —
-`setData({ key: null })`. Сейчас через хранилище идёт тема; туда же в
-будущем лягут настройки и локальный рейтинг.
+На Яндексе — `player.getData/setData` (облачные сейвы игрока), в VK —
+`VKWebAppStorage`, при сбое или неавторизованном игроке — фолбэк на
+`localStorage`. Сейчас через хранилище идёт тема; туда же в будущем лягут
+настройки и локальный рейтинг.
 
 ## Тесты
 
-`client/tests/platform.test.ts` покрывает `detectPlatform` (7 кейсов),
-`shouldShowInterstitial` (интервал) и `YandexAdapter` (имя игрока, облачное
-хранилище, фолбэки, рекламные колбэки) на фейковом SDK — 13 тестов.
+`client/tests/platform.test.ts` покрывает `detectPlatform` (Яндекс, VK, веб),
+`shouldShowInterstitial` (интервал), `YandexAdapter` и `VKAdapter`
+(имя игрока, облачное хранилище, фолбэки, рекламные колбэки и guard-таймаут)
+на фейковых SDK/bridge.

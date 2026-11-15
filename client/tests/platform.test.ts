@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { detectPlatform, shouldShowInterstitial } from '../src/platform';
+import { VKAdapter } from '../src/platform/vk';
+import type { VkBridgeApi } from '../src/platform/vk';
 import { YandexAdapter } from '../src/platform/yandex';
 import type { YandexPlayer, YandexSdk } from '../src/platform/yandex';
 
@@ -14,10 +16,15 @@ describe('detectPlatform', () => {
     expect(detectPlatform('https://example.com/', 'Mozilla/5.0 (Linux; YaApp_Android/23.11)')).toBe('yandex');
   });
 
+  it('распознаёт VK Mini Apps по URL', () => {
+    expect(detectPlatform('https://vk.com/app123', 'Mozilla/5.0')).toBe('vk');
+    expect(detectPlatform('https://vk.ru/app123', 'Mozilla/5.0')).toBe('vk');
+    expect(detectPlatform('https://example.com/?vk_app_id=51234567', 'Mozilla/5.0')).toBe('vk');
+  });
+
   it('остальное — веб', () => {
     expect(detectPlatform('https://example.com/', 'Mozilla/5.0')).toBe('web');
     expect(detectPlatform('https://example.com/', 'Mozilla/5.0 YaBrowser/24.7')).toBe('web');
-    expect(detectPlatform('https://vk.com/app123', 'Mozilla/5.0')).toBe('web');
   });
 });
 
@@ -29,6 +36,113 @@ describe('shouldShowInterstitial', () => {
   it('соблюдает минимальный интервал', () => {
     expect(shouldShowInterstitial(1000, 1000 + 179999)).toBe(false);
     expect(shouldShowInterstitial(1000, 1000 + 180000)).toBe(true);
+  });
+});
+
+describe('VKAdapter', () => {
+  /** Фейковый bridge с хранилищем и управляемыми ответами. */
+  const makeBridge = (store: Record<string, string>): VkBridgeApi & {
+    events: { event: string; params?: Record<string, unknown> }[];
+  } => {
+    const events: { event: string; params?: Record<string, unknown> }[] = [];
+    return {
+      events,
+      send: async (event, params) => {
+        events.push({ event, params });
+        switch (event) {
+          case 'VKWebAppInit':
+            return true;
+          case 'VKWebAppGetUserInfo':
+            return { first_name: 'Аня', last_name: 'Смирнова' };
+          case 'VKWebAppStorageGet':
+            return {
+              keys: Object.keys(store).map((k) => ({ key: k, value: store[k] })),
+            };
+          case 'VKWebAppStorageSet': {
+            const key = String((params as { key?: unknown })?.key);
+            const value = String((params as { value?: unknown })?.value ?? '');
+            if (value === '') delete store[key];
+            else store[key] = value;
+            return true;
+          }
+          default:
+            return true;
+        }
+      },
+    };
+  };
+
+  it('ready() шлёт VKWebAppInit и не падает при сбое', async () => {
+    const ok = makeBridge({});
+    const adapter = new VKAdapter(ok);
+    await expect(adapter.ready()).resolves.toBeUndefined();
+    expect(ok.events.some((e) => e.event === 'VKWebAppInit')).toBe(true);
+
+    const failing: VkBridgeApi = {
+      send: async () => {
+        throw new Error('нет VK');
+      },
+    };
+    await expect(new VKAdapter(failing).ready()).resolves.toBeUndefined();
+  });
+
+  it('возвращает имя игрока из VKWebAppGetUserInfo', async () => {
+    await expect(new VKAdapter(makeBridge({})).getPlayerName()).resolves.toBe('Аня Смирнова');
+  });
+
+  it('сбой или мусор в ответе → null', async () => {
+    const failing: VkBridgeApi = {
+      send: async () => {
+        throw new Error('нет сети');
+      },
+    };
+    await expect(new VKAdapter(failing).getPlayerName()).resolves.toBeNull();
+    const garbage: VkBridgeApi = { send: async () => 'не объект' };
+    await expect(new VKAdapter(garbage).getPlayerName()).resolves.toBeNull();
+  });
+
+  it('storage читает и пишет через VKWebAppStorage', async () => {
+    const store: Record<string, string> = { best: '120' };
+    const adapter = new VKAdapter(makeBridge(store));
+    await expect(adapter.storage.get('best')).resolves.toBe('120');
+    await adapter.storage.set('games', '7');
+    expect(store['games']).toBe('7');
+    await adapter.storage.remove('games');
+    expect('games' in store).toBe(false);
+  });
+
+  it('пустая строка в VK Storage читается как null', async () => {
+    const store: Record<string, string> = { theme: '' };
+    const adapter = new VKAdapter(makeBridge(store));
+    await expect(adapter.storage.get('theme')).resolves.toBeNull();
+  });
+
+  it('сбой storage уходит в фолбэк, не падая', async () => {
+    const failing: VkBridgeApi = {
+      send: async () => {
+        throw new Error('нет VK');
+      },
+    };
+    const adapter = new VKAdapter(failing);
+    await expect(adapter.storage.get('missing')).resolves.toBeNull();
+    await expect(adapter.storage.set('k', 'v')).resolves.toBeUndefined();
+    await expect(adapter.storage.remove('k')).resolves.toBeUndefined();
+  });
+
+  it('showInterstitial шлёт VKWebAppShowNativeAds и резолвится', async () => {
+    const bridge = makeBridge({});
+    const adapter = new VKAdapter(bridge);
+    await expect(adapter.showInterstitial()).resolves.toBeUndefined();
+    const ad = bridge.events.find((e) => e.event === 'VKWebAppShowNativeAds');
+    expect(ad).toBeDefined();
+    expect((ad!.params as { ad_format?: unknown }).ad_format).toBe('interstitial');
+  });
+
+  it('showInterstitial резолвится, даже если VK не ответил (guard)', async () => {
+    const hanging: VkBridgeApi = {
+      send: () => new Promise(() => undefined),
+    };
+    await expect(new VKAdapter(hanging).showInterstitial()).resolves.toBeUndefined();
   });
 });
 

@@ -40,7 +40,11 @@
       (не чаще раза в 3 минуты), облачное хранилище игрока с фолбэком на
       localStorage; 13 тестов платформенного слоя
 - [ ] Яндекс Игры: локальный рейтинг, публикация черновика
-- [ ] VK Bridge → Одноклассники → Telegram WebApp
+- [x] VK Bridge (VK Mini Apps): VKWebAppInit, имя игрока (VKWebAppGetUserInfo),
+      облачное хранилище VKWebAppStorage с фолбэком на localStorage,
+      нативная interstitial-реклама; определение площадки по URL (vk_app_id,
+      vk.com/vk.ru); ~24 теста платформенного слоя
+- [ ] Одноклассники → Telegram WebApp
 
 ## Этап 4 — Мультиплеер (server/)
 - [x] Authoritative-сервер: Node.js + ws, комнаты (быстрый матч, приватная по
