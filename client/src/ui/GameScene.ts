@@ -12,6 +12,7 @@ import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
 import type { SafeInsets } from './safeArea';
 import { FONT_FAMILY, palette } from '../theme';
+import { shouldReduceMotion } from '../perf';
 
 export interface GameSceneOptions {
   dawg: Dawg;
@@ -299,7 +300,8 @@ export class GameScene {
     const expired = this.timer.tick(now);
     this.updateTimerDisplay();
     if (expired !== null) this.handleExpire(expired);
-    if (this.popCell !== null) {
+    
+    if (!shouldReduceMotion() && this.popCell !== null) {
       const t = (now - this.popStart) / POP_MS;
       if (t >= 1) {
         this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
@@ -308,6 +310,9 @@ export class GameScene {
         const scale = 1 + 0.16 * Math.sin(Math.PI * t);
         this.boardView.setPulse(this.popCell.row, this.popCell.col, scale);
       }
+    } else if (shouldReduceMotion() && this.popCell !== null && now - this.popStart >= POP_MS) {
+      this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
+      this.popCell = null;
     }
   };
 
@@ -514,7 +519,7 @@ export class GameScene {
 
   private readonly shakeTicker = (): void => {
     const t = performance.now() - this.shakeStart;
-    if (t >= SHAKE_MS || this.destroyed) {
+    if (t >= SHAKE_MS || this.destroyed || shouldReduceMotion()) {
       this.shakeActive = false;
       this.app.ticker.remove(this.shakeTicker);
       if (!this.destroyed) this.boardView.position.x = this.boardX;

@@ -5,6 +5,7 @@ import { addResult, parseLeaderboard, serializeLeaderboard, LEADERBOARD_KEY } fr
 import type { LeaderboardEntry } from './game/leaderboard';
 import { setTheme } from './theme';
 import { FONT_FAMILY, palette, themeKind } from './theme';
+import { getPerformanceConfig, invalidateDeviceInfo } from './perf';
 import { GameScene } from './ui/GameScene';
 import type { GameSceneOptions } from './ui/GameScene';
 import { LobbyScene } from './ui/LobbyScene';
@@ -29,18 +30,23 @@ async function bootstrap(): Promise<void> {
     setTheme('dark');
   }
 
+  const perfConfig = getPerformanceConfig();
   const app = new Application();
   await app.init({
     background: palette().bg,
     resizeTo: window,
-    antialias: true,
-    resolution: Math.min(window.devicePixelRatio || 1, 2),
-    autoDensity: true,
+    antialias: perfConfig.antialias,
+    resolution: perfConfig.resolution,
+    autoDensity: perfConfig.autoDensity,
   });
   document.body.appendChild(app.canvas);
   document.body.style.background = cssBackground();
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
+
+  window.addEventListener('resize', () => {
+    invalidateDeviceInfo();
+  });
 
   const loading = new Text({
     text: 'Загрузка словаря…',
