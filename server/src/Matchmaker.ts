@@ -1,0 +1,108 @@
+import type { Dawg, GameConfig } from '@balda/shared';
+import { Room } from './Room';
+import type { PlayerConnection, RoomOptions } from './Room';
+
+const ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ID_LENGTH = 5;
+/** Сколько времени после завершения партии комната остаётся в памяти. */
+const FINISHED_ROOM_TTL_MS = 60_000;
+
+export interface MatchmakerOptions {
+  config?: GameConfig;
+  turnMs?: number;
+  reconnectMs?: number;
+}
+
+export interface JoinResult {
+  room: Room;
+  playerId: string;
+  token: string;
+  index: number;
+}
+
+/** Быстрый матч и приватные комнаты по коду. */
+export class Matchmaker {
+  private dawg: Dawg;
+  private options: MatchmakerOptions;
+  private rooms = new Map<string, Room>();
+  private waiting: Room | null = null;
+
+  constructor(dawg: Dawg, options: MatchmakerOptions = {}) {
+    this.dawg = dawg;
+    this.options = options;
+  }
+
+  /** Быстрый матч: садит в ожидающую комнату или создаёт новую. */
+  quickMatch(conn: PlayerConnection, name: string): JoinResult {
+    if (this.waiting === null || this.waiting.isFull || this.waiting.isFinished) {
+      this.waiting = this.createRoomObject();
+    }
+    const room = this.waiting;
+    const res = room.addPlayer(conn, name);
+    return { room, ...res };
+  }
+
+  /** Приватная комната по коду: создаёт и сажает автора. */
+  createRoom(conn: PlayerConnection, name: string): JoinResult {
+    const room = this.createRoomObject();
+    const res = room.addPlayer(conn, name);
+    return { room, ...res };
+  }
+
+  /** Вход в приватную комнату по коду. */
+  joinRoom(roomId: string, conn: PlayerConnection, name: string): JoinResult | null {
+    const room = this.rooms.get(roomId.trim().toUpperCase());
+    if (!room || room.isFull || room.isFinished) return null;
+    const res = room.addPlayer(conn, name);
+    return { room, ...res };
+  }
+
+  getRoom(roomId: string): Room | undefined {
+    return this.rooms.get(roomId.trim().toUpperCase());
+  }
+
+  get roomCount(): number {
+    return this.rooms.size;
+  }
+
+  /** Остановить все таймеры всех комнат (для тестов и graceful shutdown). */
+  dispose(): void {
+    for (const room of this.rooms.values()) room.dispose();
+    this.rooms.clear();
+    this.waiting = null;
+  }
+
+  private createRoomObject(): Room {
+    const id = this.newId();
+    const options: RoomOptions = {
+      id,
+      dawg: this.dawg,
+      config: this.options.config,
+      turnMs: this.options.turnMs,
+      reconnectMs: this.options.reconnectMs,
+      onFinished: (room) => {
+        if (this.waiting?.id === room.id) this.waiting = null;
+        setTimeout(() => {
+          room.dispose();
+          this.rooms.delete(room.id);
+        }, FINISHED_ROOM_TTL_MS);
+      },
+      onEmpty: (room) => {
+        room.dispose();
+        this.rooms.delete(room.id);
+        if (this.waiting?.id === room.id) this.waiting = null;
+      },
+    };
+    const room = new Room(options);
+    this.rooms.set(id, room);
+    return room;
+  }
+
+  private newId(): string {
+    let out = '';
+    for (let i = 0; i < ID_LENGTH; i++) {
+      out += ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)];
+    }
+    return out;
+  }
+}
