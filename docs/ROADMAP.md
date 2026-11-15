@@ -47,7 +47,9 @@
 - [x] Telegram WebApp (Mini Apps): ready/expand, имя игрока (initDataUnsafe),
       облачное CloudStorage с фолбэком и страховочным таймаутом; скрипт
       telegram-web-app.js в index.html; определение площадки (t.me, tgWebApp*)
-- [ ] Одноклассники
+- [x] Одноклассники: новые игры публикуются только через VK Mini Apps
+      (apiok.ru, ok-js-sdk заморожен с 2019), VK-адаптер покрывает OK;
+      ok.ru распознаётся как VK-платформа
 
 ## Этап 4 — Мультиплеер (server/)
 - [x] Authoritative-сервер: Node.js + ws, комнаты (быстрый матч, приватная по

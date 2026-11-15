@@ -32,7 +32,7 @@ interface PlatformAdapter {
 
 `createAdapter()` смотрит на URL и user-agent: Яндекса — (`yandex`, `ysdk`,
 `ya.ru`, UA `YaApp`; просто YaBrowser считается вебом), VK — (`vk_app_id` в URL
-запуска мини-аппа, ссылки `vk.com` / `vk.ru`), Telegram — (`t.me`, `telegram`,
+запуска мини-аппа, ссылки `vk.com` / `vk.ru`, а также `ok.ru`), Telegram — (`t.me`, `telegram`,
 параметры `tgWebApp*`). Яндексовский SDK подгружается скриптом, vk-bridge —
 динамическим импортом (отдельный чанк, грузится только внутри VK), Telegram
 берётся из глобального объекта (скрипт `telegram-web-app.js` подключён в
@@ -51,6 +51,14 @@ interface PlatformAdapter {
 
 Публикация черновика VK-аппа — через vk.com/editapp?act=settings (см. задачу
 в ROADMAP, Этап 3).
+
+## Одноклассники
+
+Отдельного адаптера нет: OK больше не принимает новые игры напрямую —
+«Создание игр и пользовательских приложений теперь происходит через VK Mini Apps»
+(apiok.ru/apps/rules), а ok-js-sdk не обновлялся с 2019 года. Игра регистрируется
+как VK Mini App и запускается в OK через ту же платформу VK Mini Apps, поэтому
+запуск с `ok.ru` распознаётся как VK-платформа и обслуживается `VKAdapter`.
 
 ## Telegram Mini Apps (`telegram.ts`)
 
@@ -84,7 +92,7 @@ interface PlatformAdapter {
 
 ## Тесты
 
-`client/tests/platform.test.ts` покрывает `detectPlatform` (Яндекс, VK,
+`client/tests/platform.test.ts` покрывает `detectPlatform` (Яндекс, VK, OK,
 Telegram, веб), `shouldShowInterstitial` (интервал), `YandexAdapter`,
 `VKAdapter` и `TelegramAdapter` (имя игрока, облачное хранилище, фолбэки,
 guard-таймауты, рекламные колбэки) на фейковых SDK/bridge/WebApp.

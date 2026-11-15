@@ -22,6 +22,9 @@ describe('detectPlatform', () => {
     expect(detectPlatform('https://vk.com/app123', 'Mozilla/5.0')).toBe('vk');
     expect(detectPlatform('https://vk.ru/app123', 'Mozilla/5.0')).toBe('vk');
     expect(detectPlatform('https://example.com/?vk_app_id=51234567', 'Mozilla/5.0')).toBe('vk');
+    // OK: новые игры публикуются только через VK Mini Apps — запуск с ok.ru
+    // обслуживает тот же VK-адаптер.
+    expect(detectPlatform('https://ok.ru/game/123', 'Mozilla/5.0')).toBe('vk');
   });
 
   it('распознаёт Telegram Mini Apps по URL', () => {

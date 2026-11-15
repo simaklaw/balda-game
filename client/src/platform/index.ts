@@ -18,6 +18,9 @@ export function detectPlatform(rawUrl: string, userAgent: string): PlatformId {
   if (ua.includes('yandex') || ua.includes('yaapp')) return 'yandex';
   // VK Mini Apps: iframe-запуск содержит vk_app_id, обычные ссылки — vk.com/vk.ru.
   if (url.includes('vk_app_id') || url.includes('vk.com') || url.includes('vk.ru')) return 'vk';
+  // Одноклассники: новые игры публикуются только через VK Mini Apps,
+  // поэтому запуск с ok.ru обслуживает тот же VK-адаптер (vk-bridge).
+  if (url.includes('ok.ru')) return 'vk';
   // Telegram Mini Apps: запуск через t.me или параметры tgWebApp* в URL/хэше.
   if (url.includes('t.me') || url.includes('telegram') || url.includes('tgwebapp')) return 'telegram';
   return 'web';
@@ -47,7 +50,7 @@ export async function createAdapter(): Promise<PlatformAdapter> {
   if (hint === 'vk') {
     try {
       // Динамический импорт: vk-bridge попадает в отдельный чанк и грузится
-      // только внутри VK.
+      // только внутри VK/OK.
       const mod = await import('@vkontakte/vk-bridge');
       return new VKAdapter(mod.default as unknown as VkBridgeApi);
     } catch {
