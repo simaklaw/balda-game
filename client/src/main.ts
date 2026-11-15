@@ -5,7 +5,9 @@ import { setTheme } from './theme';
 import { FONT_FAMILY, palette, themeKind } from './theme';
 import { GameScene } from './ui/GameScene';
 import type { GameSceneOptions } from './ui/GameScene';
+import { LobbyScene } from './ui/LobbyScene';
 import { MenuScene } from './ui/MenuScene';
+import { OnlineGameScene } from './ui/OnlineGameScene';
 
 interface Scene {
   view: Container;
@@ -84,6 +86,31 @@ async function bootstrap(): Promise<void> {
       }),
     );
   };
+
+  let playerName = 'Игрок';
+  try {
+    playerName = (await adapter.getPlayerName()) ?? 'Игрок';
+  } catch {
+    /* имя недоступно — играем под нейтральным именем */
+  }
+
+  const showLobby = (): void => {
+    setScene(
+      new LobbyScene(app, playerName, adapter.storage, {
+        onBack: showMenu,
+        onGameStarted: (net, state) =>
+          setScene(
+            new OnlineGameScene(app, net, state, {
+              onMenu: () => {
+                net.close();
+                showMenu();
+              },
+            }),
+          ),
+      }),
+    );
+  };
+
   const showMenu = (): void => {
     setScene(
       new MenuScene(app, {
@@ -100,6 +127,7 @@ async function bootstrap(): Promise<void> {
           void adapter.storage.set('balda.theme', themeKind());
           showMenu();
         },
+        onOnline: showLobby,
       }),
     );
   };

@@ -1,11 +1,14 @@
 import { DEFAULT_CONFIG, Game } from '@balda/shared';
 import type { Dawg, GameConfig, MoveErrorCode, MoveInput } from '@balda/shared';
+import { calcElo, CHIPS_PER_WIN } from './elo';
 import type { RoomState, ServerMessage } from './protocol';
 
 /** Окно переподключения по умолчанию, мс. */
 export const RECONNECT_MS = 45_000;
 /** Длительность хода по умолчанию, мс. */
 export const TURN_MS = 120_000;
+/** Рейтинг нового игрока по умолчанию. */
+export const DEFAULT_RATING = 1000;
 
 /** Стартовые слова по размеру поля (длина = размеру). */
 const INITIAL_WORDS: Record<number, string> = { 3: 'бал', 5: 'слово', 7: 'чемодан' };
@@ -39,6 +42,7 @@ interface Slot {
   name: string;
   /** Секрет сессии: reconnect принимается только с ним (защита от угона слота). */
   token: string;
+  rating: number;
   conn: PlayerConnection | null;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -55,6 +59,13 @@ export interface RoomOptions {
   onFinished?: (room: Room) => void;
   /** Комната опустела (все отключились до старта). */
   onEmpty?: (room: Room) => void;
+}
+
+export interface RoomOutcome {
+  /** Новые рейтинги игроков после партии. */
+  newRatings: number[];
+  deltaRating: number[];
+  deltaChips: number[];
 }
 
 function sanitizeName(name: string, index: number): string {
@@ -76,6 +87,7 @@ export class Room {
   private onEmpty?: (room: Room) => void;
   private turnTimer: ReturnType<typeof setTimeout> | null = null;
   private turnDeadline: number | null = null;
+  private outcome: RoomOutcome | null = null;
 
   constructor(options: RoomOptions) {
     this.id = options.id;
@@ -100,14 +112,38 @@ export class Room {
     return this.slots.filter((s) => s !== null).length;
   }
 
+  /** Итог партии: новые рейтинги и начисления (заполняется при завершении). */
+  get lastOutcome(): RoomOutcome | null {
+    return this.outcome;
+  }
+
+  get winnerIndex(): number | null {
+    return this.game.winner;
+  }
+
+  /** Текущие рейтинги игроков. */
+  get ratings(): number[] {
+    return this.slots.map((s) => s?.rating ?? DEFAULT_RATING);
+  }
+
+  /** Имена игроков (пустая строка — слот свободен). */
+  get names(): string[] {
+    return this.slots.map((s) => s?.name ?? '');
+  }
+
   /** Посадить игрока в свободный слот. Бросает, если комната заполнена. */
-  addPlayer(conn: PlayerConnection, name: string): { playerId: string; token: string; index: number } {
+  addPlayer(
+    conn: PlayerConnection,
+    name: string,
+    rating: number = DEFAULT_RATING,
+  ): { playerId: string; token: string; index: number } {
     const index = this.slots.findIndex((s) => s === null);
     if (index === -1) throw new Error('Комната заполнена');
     const slot: Slot = {
       id: crypto.randomUUID(),
       name: sanitizeName(name, index),
       token: crypto.randomUUID(),
+      rating,
       conn,
       reconnectTimer: null,
     };
@@ -132,7 +168,7 @@ export class Room {
     }
     slot.conn = conn;
     if (this.isFinished) {
-      conn.send({ type: 'game-over', winner: this.game.winner, scores: this.scores(), reason: this.game.endReason });
+      conn.send({ type: 'game-over', winner: this.game.winner, scores: this.scores(), reason: this.game.endReason, deltaRating: this.outcome?.deltaRating ?? [0, 0], deltaChips: this.outcome?.deltaChips ?? [0, 0] });
     }
     this.broadcastState();
     return index;
@@ -237,7 +273,7 @@ export class Room {
         connected: s !== null && s.conn !== null,
       })),
       currentPlayer: this.game.currentPlayer,
-      status: this.game.status,
+      status: this.isFull ? this.game.status : 'waiting',
       history: [...this.game.history],
       winner: this.game.winner,
       endReason: this.game.endReason,
@@ -276,6 +312,19 @@ export class Room {
     if (this.playerCount === 0) this.onEmpty?.(this);
   }
 
+  /** Пересчёт Эло и фишек по факту завершения партии. */
+  private computeOutcome(): RoomOutcome {
+    const [r0, r1] = this.ratings;
+    const winner = this.game.winner;
+    const score0: 0 | 0.5 | 1 = winner === null ? 0.5 : winner === 0 ? 1 : 0;
+    const [n0, n1] = calcElo(r0, r1, score0);
+    return {
+      newRatings: [n0, n1],
+      deltaRating: [n0 - r0, n1 - r1],
+      deltaChips: [winner === 0 ? CHIPS_PER_WIN : 0, winner === 1 ? CHIPS_PER_WIN : 0],
+    };
+  }
+
   private armTurnTimer(): void {
     this.clearTurnTimer();
     if (this.turnMs <= 0 || this.isFinished || !this.isFull) return;
@@ -310,6 +359,7 @@ export class Room {
         slot.reconnectTimer = null;
       }
     }
+    this.outcome = this.computeOutcome();
     this.broadcastState();
     const scores = this.scores();
     for (const slot of this.slots) {
@@ -318,6 +368,8 @@ export class Room {
         winner: this.game.winner,
         scores,
         reason: this.game.endReason,
+        deltaRating: this.outcome.deltaRating,
+        deltaChips: this.outcome.deltaChips,
       });
     }
     this.onFinished?.(this);

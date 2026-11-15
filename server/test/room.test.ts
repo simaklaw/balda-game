@@ -30,6 +30,14 @@ class FakeConn implements PlayerConnection {
     return null;
   }
 
+  gameOver() {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const m = this.messages[i]!;
+      if (m.type === 'game-over') return m;
+    }
+    return null;
+  }
+
   errors(): string[] {
     return this.messages.filter((m) => m.type === 'error').map((m) => m.message);
   }
@@ -79,6 +87,14 @@ describe('Room', () => {
     expect(state!.currentPlayer).toBe(0);
     expect(state!.players.map((p) => p.name)).toEqual(['Алиса', 'Боб']);
     expect(state!.board[1]).toEqual(['б', 'а', 'л']);
+  });
+
+  it('до прихода второго игрока статус waiting', () => {
+    const solo = makeRoom();
+    const conn = new FakeConn();
+    solo.addPlayer(conn, 'Один');
+    expect(conn.lastState()!.status).toBe('waiting');
+    solo.dispose();
   });
 
   it('валидный ход принимается, счёт и очередь меняются', () => {
@@ -144,6 +160,22 @@ describe('Room', () => {
     expect(state.status).toBe('finished');
     expect(state.winner).toBe(1);
   });
+
+  it('game-over содержит дельту рейтинга и фишки победителю', () => {
+    const rated = makeRoom();
+    const connA = new FakeConn();
+    const connB = new FakeConn();
+    const a = rated.addPlayer(connA, 'А', 1200);
+    rated.addPlayer(connB, 'Б', 1000);
+    rated.leave(a.playerId); // А ушёл — победил Б
+    const over = connB.gameOver();
+    expect(over).not.toBeNull();
+    expect(over!.deltaChips).toEqual([0, 10]);
+    expect(over!.deltaRating[1]).toBeGreaterThan(0);
+    expect(over!.deltaRating[0]).toBeLessThan(0);
+    void a;
+    rated.dispose();
+  });
 });
 
 describe('Matchmaker', () => {
@@ -165,6 +197,24 @@ describe('Matchmaker', () => {
     const guest = mm.joinRoom(host.room.id.toLowerCase(), new FakeConn(), 'Б');
     expect(guest).not.toBeNull();
     expect(mm.joinRoom(host.room.id, new FakeConn(), 'В')).toBeNull();
+    mm.dispose();
+  });
+
+  it('код комнаты — только буквы (ввод с canvas-клавиатуры)', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0 });
+    const host = mm.createRoom(new FakeConn(), 'А');
+    expect(host.room.id).toMatch(/^[A-Z]{5}$/);
+    mm.dispose();
+  });
+
+  it('рейтинг победителя растёт между партиями', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0 });
+    const before = mm.getRating('Победитель');
+    const host = mm.createRoom(new FakeConn(), 'Победитель');
+    const guest = mm.joinRoom(host.room.id, new FakeConn(), 'Проигравший');
+    host.room.leave(guest!.playerId);
+    expect(mm.getRating('Победитель')).toBeGreaterThan(before);
+    expect(mm.getRating('Проигравший')).toBeLessThan(1000);
     mm.dispose();
   });
 });

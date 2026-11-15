@@ -14,7 +14,8 @@ export interface RoomState {
   board: string[][];
   players: { name: string; score: number; connected: boolean }[];
   currentPlayer: number;
-  status: GameStatus;
+  /** 'waiting' — ждём второго игрока, иначе статус партии. */
+  status: GameStatus | 'waiting';
   history: MoveHistoryEntry[];
   winner: number | null;
   endReason: EndReason;
@@ -49,6 +50,8 @@ export type ServerMessage =
       winner: number | null;
       scores: number[];
       reason: EndReason;
+      deltaRating: number[];
+      deltaChips: number[];
     };
 
 const CLIENT_TYPES: ReadonlySet<string> = new Set([

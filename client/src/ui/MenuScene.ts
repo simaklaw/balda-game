@@ -14,6 +14,7 @@ export interface MenuSelection {
 export interface MenuSceneCallbacks {
   onStart: (selection: MenuSelection) => void;
   onThemeChange: () => void;
+  onOnline: () => void;
 }
 
 const DIFFICULTIES: readonly { id: Difficulty; caption: string }[] = [
@@ -46,7 +47,7 @@ const ROW_WIDTH = 104;
 const TIME_ROW_WIDTH = 88;
 const ROW_GAP = 12;
 
-/** Экран главного меню: сложность, поле, контроль времени, правила и тема. */
+/** Экран главного меню: сложность, поле, контроль времени, онлайн, правила и тема. */
 export class MenuScene {
   readonly view = new Container();
   private readonly app: Application;
@@ -62,6 +63,7 @@ export class MenuScene {
   private readonly timeButtons: Button[] = [];
   private readonly btnTheme: Button;
   private readonly btnRules: Button;
+  private readonly btnOnline: Button;
   private readonly btnPlay: Button;
   private difficulty: Difficulty = 'medium';
   private boardSize: 3 | 5 = 5;
@@ -193,6 +195,18 @@ export class MenuScene {
     });
     this.view.addChild(this.btnRules);
 
+    this.btnOnline = new Button({
+      caption: 'Онлайн',
+      width: 220,
+      height: 44,
+      color: palette().panel,
+      fontSize: 16,
+      onTap: () => {
+        setTimeout(() => this.callbacks.onOnline(), 0);
+      },
+    });
+    this.view.addChild(this.btnOnline);
+
     this.btnPlay = new Button({
       caption: 'Играть',
       width: 220,
@@ -287,14 +301,15 @@ export class MenuScene {
     const height = this.app.screen.height;
     const availH = Math.max(240, height - insets.top - insets.bottom);
     const availW = Math.max(208, width - insets.left - insets.right - 32);
-    const ultra = availH < 400;
-    const s = Math.min(1, Math.max(0.5, availH / 640));
+    const ultra = availH < 440;
+    const s = Math.min(1, Math.max(0.5, availH / 700));
 
     const diffW = Math.min(ROW_WIDTH, Math.floor((availW - ROW_GAP * 2) / 3));
     const timeW = Math.min(TIME_ROW_WIDTH, Math.floor((availW - ROW_GAP * 3) / 4));
     const rowH = ultra ? 36 : 46;
     const themeH = ultra ? 36 : 44;
     const rulesH = ultra ? 36 : 44;
+    const onlineH = ultra ? 36 : 44;
     const playH = ultra ? 44 : 56;
     const labelFont = Math.max(13, Math.floor(17 * s));
     const titleFont = Math.max(30, Math.floor(56 * s));
@@ -319,9 +334,21 @@ export class MenuScene {
     }
     this.btnTheme.setHeight(themeH);
     this.btnRules.setHeight(rulesH);
+    this.btnOnline.setHeight(onlineH);
     this.btnPlay.setHeight(playH);
 
-    const totalH = 14 + titleBlock + 3 * (labelH + rowH + blockGap) + hintH + themeH + 10 + rulesH + 12 + playH;
+    const totalH =
+      14 +
+      titleBlock +
+      3 * (labelH + rowH + blockGap) +
+      hintH +
+      themeH +
+      10 +
+      rulesH +
+      10 +
+      onlineH +
+      12 +
+      playH;
     let y = insets.top + 14 + Math.max(0, Math.floor((availH - totalH) / 2));
 
     this.title.position.set(width / 2, y + titleFont / 2);
@@ -353,7 +380,10 @@ export class MenuScene {
     y += themeH + 10;
     this.btnRules.setWidth(200);
     this.btnRules.position.set((width - 200) / 2, y);
-    y += rulesH + 12;
+    y += rulesH + 10;
+    this.btnOnline.setWidth(220);
+    this.btnOnline.position.set((width - 220) / 2, y);
+    y += onlineH + 12;
     this.btnPlay.setWidth(220);
     this.btnPlay.position.set((width - 220) / 2, y);
   }
