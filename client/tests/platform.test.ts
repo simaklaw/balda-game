@@ -138,11 +138,12 @@ describe('VKAdapter', () => {
     expect((ad!.params as { ad_format?: unknown }).ad_format).toBe('interstitial');
   });
 
-  it('showInterstitial резолвится, даже если VK не ответил (guard)', async () => {
+  it('showInterstitial резолвится по guard-таймауту, если VK не ответил', async () => {
     const hanging: VkBridgeApi = {
       send: () => new Promise(() => undefined),
     };
-    await expect(new VKAdapter(hanging).showInterstitial()).resolves.toBeUndefined();
+    // Короткий guard вместо боевых 20 с — тест не должен висеть.
+    await expect(new VKAdapter(hanging, 10).showInterstitial()).resolves.toBeUndefined();
   });
 });
 

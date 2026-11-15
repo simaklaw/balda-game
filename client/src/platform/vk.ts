@@ -10,7 +10,7 @@ export interface VkBridgeApi {
 }
 
 /** Сколько ждём нативную рекламу, прежде чем не подвешивать игру. */
-const AD_GUARD_MS = 20000;
+export const AD_GUARD_MS = 20000;
 
 /**
  * Платформа VK Mini Apps (VK Bridge):
@@ -23,9 +23,11 @@ const AD_GUARD_MS = 20000;
 export class VKAdapter implements PlatformAdapter {
   readonly id: PlatformId = 'vk';
   private readonly bridge: VkBridgeApi;
+  private readonly adGuardMs: number;
 
-  constructor(bridge: VkBridgeApi) {
+  constructor(bridge: VkBridgeApi, adGuardMs: number = AD_GUARD_MS) {
     this.bridge = bridge;
+    this.adGuardMs = adGuardMs;
   }
 
   async ready(): Promise<void> {
@@ -64,7 +66,7 @@ export class VKAdapter implements PlatformAdapter {
         resolve();
       };
       // Страховка: если VK не ответил, не подвешиваем игру.
-      const guard = setTimeout(finish, AD_GUARD_MS);
+      const guard = setTimeout(finish, this.adGuardMs);
       try {
         this.bridge
           .send('VKWebAppShowNativeAds', { ad_format: adFormat })
