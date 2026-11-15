@@ -13,7 +13,7 @@ const CONFIG: GameConfig = {
   maxSkipsInRow: 3,
 };
 
-const WORDS = ['бал', 'бак', 'лак', 'ак', 'ол', 'ко', 'ка', 'ла'];
+const WORDS = ['бал', 'ак', 'ол', 'бо', 'сок', 'лак'];
 
 class FakeConn implements PlayerConnection {
   messages: ServerMessage[] = [];
@@ -45,10 +45,10 @@ function makeRoom(extra: { turnMs?: number; reconnectMs?: number } = {}): Room {
   });
 }
 
-/** б а л в среднем ряду 3×3; ходы собирают слова из соседних клеток. */
+/** Поле 3×3, средний ряд «бал»; каждый ход ставит новую букву рядом. */
 const MOVE_AK = { letter: 'к', cell: { row: 0, col: 1 }, path: [{ row: 1, col: 1 }, { row: 0, col: 1 }] };
 const MOVE_OL = { letter: 'о', cell: { row: 0, col: 2 }, path: [{ row: 0, col: 2 }, { row: 1, col: 2 }] };
-const MOVE_KO = { letter: 'о', cell: { row: 0, col: 2 }, path: [{ row: 0, col: 1 }, { row: 0, col: 2 }] };
+const MOVE_BO = { letter: 'о', cell: { row: 0, col: 0 }, path: [{ row: 1, col: 0 }, { row: 0, col: 0 }] };
 const MOVE_AK_AGAIN = { letter: 'к', cell: { row: 2, col: 1 }, path: [{ row: 1, col: 1 }, { row: 2, col: 1 }] };
 
 describe('Room', () => {
@@ -97,7 +97,7 @@ describe('Room', () => {
   it('повтор слова отклоняется', () => {
     room.move(s0.playerId, MOVE_AK);
     room.move(s1.playerId, MOVE_OL);
-    room.move(s0.playerId, MOVE_KO);
+    room.move(s0.playerId, MOVE_BO);
     room.move(s1.playerId, MOVE_AK_AGAIN);
     expect(p1.errors()).toContain('Слово уже использовано');
   });
@@ -126,9 +126,10 @@ describe('Room', () => {
   it('окно реконнекта истекло — техпоражение отключившегося', () => {
     vi.useFakeTimers();
     const timed = makeRoom({ reconnectMs: 500 });
-    timed.addPlayer(new FakeConn(), 'А');
+    const connA = new FakeConn();
+    timed.addPlayer(connA, 'А');
     const sB = timed.addPlayer(new FakeConn(), 'Б');
-    timed.handleDisconnect(p0);
+    timed.handleDisconnect(connA);
     vi.advanceTimersByTime(600);
     const state = timed.stateFor(sB.index);
     expect(state.status).toBe('finished');
