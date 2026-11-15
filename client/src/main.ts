@@ -1,6 +1,8 @@
 import { Application, Container, Text } from 'pixi.js';
 import { loadDawg } from './dict/dictionary';
 import { createAdapter, shouldShowInterstitial } from './platform';
+import { addResult, parseLeaderboard, serializeLeaderboard, LEADERBOARD_KEY } from './game/leaderboard';
+import type { LeaderboardEntry } from './game/leaderboard';
 import { setTheme } from './theme';
 import { FONT_FAMILY, palette, themeKind } from './theme';
 import { GameScene } from './ui/GameScene';
@@ -78,11 +80,32 @@ async function bootstrap(): Promise<void> {
     next();
   };
 
+  // Локальный рейтинг: результат оффлайн-партии уходит в хранилище платформы
+  // (на Яндексе — облачные сейвы игрока), сбой не должен мешать игре.
+  const saveResult = (options: GameSceneOptions, score: number): void => {
+    const entry: LeaderboardEntry = {
+      score,
+      difficulty: options.difficulty,
+      boardSize: options.boardSize,
+      timeControl: options.timeControl,
+      date: new Date().toISOString(),
+    };
+    void (async () => {
+      try {
+        const entries = parseLeaderboard(await adapter.storage.get(LEADERBOARD_KEY));
+        await adapter.storage.set(LEADERBOARD_KEY, serializeLeaderboard(addResult(entries, entry)));
+      } catch {
+        /* рейтинг не критичен */
+      }
+    })();
+  };
+
   const startGame = (options: GameSceneOptions): void => {
     setScene(
       new GameScene(app, options, {
         onMenu: () => void afterGameOver(showMenu),
         onRestart: (nextOptions) => void afterGameOver(() => startGame(nextOptions)),
+        onGameOver: (score) => saveResult(options, score),
       }),
     );
   };
@@ -112,24 +135,36 @@ async function bootstrap(): Promise<void> {
   };
 
   const showMenu = (): void => {
-    setScene(
-      new MenuScene(app, {
-        onStart: (selection) =>
-          startGame({
-            dawg,
-            difficulty: selection.difficulty,
-            boardSize: selection.boardSize,
-            timeControl: selection.timeControl,
-          }),
-        onThemeChange: () => {
-          app.renderer.background.color = palette().bg;
-          document.body.style.background = cssBackground();
-          void adapter.storage.set('balda.theme', themeKind());
-          showMenu();
-        },
-        onOnline: showLobby,
-      }),
-    );
+    void (async () => {
+      let leaderboard: LeaderboardEntry[] = [];
+      try {
+        leaderboard = parseLeaderboard(await adapter.storage.get(LEADERBOARD_KEY));
+      } catch {
+        /* пустой рейтинг лучше сломанного меню */
+      }
+      setScene(
+        new MenuScene(
+          app,
+          {
+            onStart: (selection) =>
+              startGame({
+                dawg,
+                difficulty: selection.difficulty,
+                boardSize: selection.boardSize,
+                timeControl: selection.timeControl,
+              }),
+            onThemeChange: () => {
+              app.renderer.background.color = palette().bg;
+              document.body.style.background = cssBackground();
+              void adapter.storage.set('balda.theme', themeKind());
+              showMenu();
+            },
+            onOnline: showLobby,
+          },
+          leaderboard,
+        ),
+      );
+    })();
   };
   showMenu();
 

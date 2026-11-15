@@ -1,6 +1,8 @@
 import { Application, Container, Graphics, Text } from 'pixi.js';
 import type { Difficulty } from '@balda/shared';
 import type { TimeControlKind } from '../game/TimerModel';
+import { formatEntry } from '../game/leaderboard';
+import type { LeaderboardEntry } from '../game/leaderboard';
 import { safeInsets } from './safeArea';
 import { Button } from './Button';
 import { FONT_FAMILY, palette, setTheme, themeKind } from '../theme';
@@ -62,16 +64,23 @@ export class MenuScene {
   private readonly sizeButtons: Button[] = [];
   private readonly timeButtons: Button[] = [];
   private readonly btnTheme: Button;
+  private readonly btnLeaderboard: Button;
   private readonly btnRules: Button;
   private readonly btnOnline: Button;
   private readonly btnPlay: Button;
+  private readonly leaderboard: readonly LeaderboardEntry[];
   private difficulty: Difficulty = 'medium';
   private boardSize: 3 | 5 = 5;
   private timeControl: TimeControlKind = 'classic';
 
-  constructor(app: Application, callbacks: MenuSceneCallbacks) {
+  constructor(
+    app: Application,
+    callbacks: MenuSceneCallbacks,
+    leaderboard: readonly LeaderboardEntry[] = [],
+  ) {
     this.app = app;
     this.callbacks = callbacks;
+    this.leaderboard = leaderboard;
     this.title = new Text({
       text: 'БАЛДА',
       style: { fontFamily: FONT_FAMILY, fontSize: 56, fill: palette().text },
@@ -195,6 +204,16 @@ export class MenuScene {
     });
     this.view.addChild(this.btnRules);
 
+    this.btnLeaderboard = new Button({
+      caption: 'Рейтинг',
+      width: 200,
+      height: 44,
+      color: palette().panel,
+      fontSize: 16,
+      onTap: () => this.showLeaderboard(),
+    });
+    this.view.addChild(this.btnLeaderboard);
+
     this.btnOnline = new Button({
       caption: 'Онлайн',
       width: 220,
@@ -289,6 +308,67 @@ export class MenuScene {
     this.view.addChild(overlay);
   }
 
+  /** Панель локального рейтинга: топ личных результатов оффлайн-партий. */
+  private showLeaderboard(): void {
+    const insets = safeInsets();
+    const width = this.app.screen.width;
+    const height = this.app.screen.height;
+    const lineHeight = 22;
+    const fontSize = 15;
+    const overlay = new Container();
+    overlay.eventMode = 'static';
+    overlay.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.75 }));
+    const panelWidth = Math.min(340, width - 40);
+    const panelHeight = Math.min(height - 80, 110 + this.leaderboard.length * lineHeight + 64);
+    const panelX = Math.floor((width - panelWidth) / 2);
+    const panelY = Math.max(48 + insets.top, Math.floor((height - panelHeight) / 2));
+    overlay.addChild(
+      new Graphics()
+        .roundRect(panelX, panelY, panelWidth, panelHeight, 16)
+        .fill({ color: palette().panel })
+        .stroke({ width: 2, color: palette().panelBorder }),
+    );
+    const title = new Text({
+      text: 'Локальный рейтинг',
+      style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: palette().text },
+    });
+    title.anchor.set(0.5);
+    title.position.set(width / 2, panelY + 32);
+    overlay.addChild(title);
+    if (this.leaderboard.length === 0) {
+      const empty = new Text({
+        text: 'Сыграйте партию против бота,\nчтобы попасть в рейтинг',
+        style: { fontFamily: FONT_FAMILY, fontSize, fill: palette().textDim, align: 'center' },
+      });
+      empty.anchor.set(0.5);
+      empty.position.set(width / 2, panelY + 78);
+      overlay.addChild(empty);
+    } else {
+      this.leaderboard.forEach((entry, i) => {
+        const line = new Text({
+          text: i + 1 + '. ' + entry.score + '  ·  ' + formatEntry(entry),
+          style: { fontFamily: FONT_FAMILY, fontSize, fill: i === 0 ? palette().accent : palette().text, lineHeight },
+        });
+        line.anchor.set(0.5, 0);
+        line.position.set(width / 2, panelY + 58 + i * lineHeight);
+        overlay.addChild(line);
+      });
+    }
+    const btnClose = new Button({
+      caption: 'Закрыть',
+      width: panelWidth - 30,
+      height: 46,
+      color: palette().panel,
+      onTap: () => {
+        this.view.removeChild(overlay);
+        overlay.destroy({ children: true });
+      },
+    });
+    btnClose.position.set(panelX + 15, panelY + panelHeight - 60);
+    overlay.addChild(btnClose);
+    this.view.addChild(overlay);
+  }
+
   /**
    * Адаптивная потоковая вёрстка: блоки идут сверху вниз и не наезжают
    * друг на друга. Ширины кнопок подстраиваются под экран (ряд из четырёх
@@ -309,6 +389,7 @@ export class MenuScene {
     const rowH = ultra ? 36 : 46;
     const themeH = ultra ? 36 : 44;
     const rulesH = ultra ? 36 : 44;
+    const leaderboardH = ultra ? 36 : 44;
     const onlineH = ultra ? 36 : 44;
     const playH = ultra ? 44 : 56;
     const labelFont = Math.max(13, Math.floor(17 * s));
@@ -334,6 +415,7 @@ export class MenuScene {
     }
     this.btnTheme.setHeight(themeH);
     this.btnRules.setHeight(rulesH);
+    this.btnLeaderboard.setHeight(leaderboardH);
     this.btnOnline.setHeight(onlineH);
     this.btnPlay.setHeight(playH);
 
@@ -345,6 +427,8 @@ export class MenuScene {
       themeH +
       10 +
       rulesH +
+      10 +
+      leaderboardH +
       10 +
       onlineH +
       12 +
@@ -381,6 +465,9 @@ export class MenuScene {
     this.btnRules.setWidth(200);
     this.btnRules.position.set((width - 200) / 2, y);
     y += rulesH + 10;
+    this.btnLeaderboard.setWidth(200);
+    this.btnLeaderboard.position.set((width - 200) / 2, y);
+    y += leaderboardH + 10;
     this.btnOnline.setWidth(220);
     this.btnOnline.position.set((width - 220) / 2, y);
     y += onlineH + 12;

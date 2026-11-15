@@ -23,6 +23,8 @@ export interface GameSceneOptions {
 export interface GameSceneCallbacks {
   onMenu: () => void;
   onRestart: (options: GameSceneOptions) => void;
+  /** Партия завершена; аргумент — очки игрока (для локального рейтинга). */
+  onGameOver?: (score: number) => void;
 }
 
 const ERROR_TEXT: Record<MoveErrorCode, string> = {
@@ -692,6 +694,8 @@ export class GameScene {
     if (this.gameOverShown) return;
     this.gameOverShown = true;
     this.timer.stop();
+    // Результат фиксируется один раз, до показа оверлея (для локального рейтинга).
+    this.callbacks.onGameOver?.(this.controller.game.players[0]!.score);
     const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
