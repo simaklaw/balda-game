@@ -7,16 +7,24 @@ import { loadDictionary } from './dictionary';
 import { Matchmaker } from './Matchmaker';
 import { parseClientMessage } from './protocol';
 import type { ClientMessage, ServerMessage } from './protocol';
+import { RatingStore } from './RatingStore';
 import type { PlayerConnection } from './Room';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const DICT_PATH =
   process.env.DICT_PATH ??
   fileURLToPath(new URL('../../client/public/dict/words.txt', import.meta.url));
+const RATINGS_PATH =
+  process.env.RATINGS_PATH ??
+  fileURLToPath(new URL('../../data/ratings.json', import.meta.url));
 
 const { dawg, size: dictSize, source: dictSource } = loadDictionary(DICT_PATH);
 
-const matchmaker = new Matchmaker(dawg);
+// Рейтинги переживают перезапуск: JSON-файл, атомарная запись при каждой партии.
+const ratingStore = new RatingStore(RATINGS_PATH);
+ratingStore.load();
+
+const matchmaker = new Matchmaker(dawg, { ratings: ratingStore });
 
 interface Session {
   roomId: string;
@@ -52,7 +60,13 @@ function extractMove(msg: ClientMessage): { path: CellPos[]; cell: CellPos; lett
 const httpServer = createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, words: dictSize, dictSource, rooms: matchmaker.roomCount }));
+    res.end(JSON.stringify({
+      ok: true,
+      words: dictSize,
+      dictSource,
+      rooms: matchmaker.roomCount,
+      ratings: ratingStore.size,
+    }));
     return;
   }
   res.writeHead(404);
@@ -179,5 +193,17 @@ wss.on('connection', (socket: WebSocket) => {
 
 httpServer.listen(PORT, () => {
   console.log('[server] словарь: ' + dictSize + ' слов (' + dictSource + ')');
+  console.log('[server] рейтинги: ' + RATINGS_PATH + ' (' + ratingStore.size + ' игроков)');
   console.log('[server] ws://0.0.0.0:' + PORT + '/ws, health: http://0.0.0.0:' + PORT + '/health');
 });
+
+// Graceful shutdown: сбрасываем рейтинги и таймеры комнат на диск/из памяти.
+function shutdown(): void {
+  matchmaker.dispose();
+  ratingStore.dispose();
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 2000).unref();
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
