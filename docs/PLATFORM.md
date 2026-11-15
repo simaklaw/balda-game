@@ -2,13 +2,13 @@
 
 Игровой код не знает, на какой площадке запущен: всё общение с площадкой идёт
 через интерфейс `PlatformAdapter`. Это позволяет добавлять новые платформы
-(VK, OK, Telegram) без изменений в логике игры.
+(VK, Telegram, OK) без изменений в логике игры.
 
 ## Интерфейс
 
 ```ts
 interface PlatformAdapter {
-  readonly id: 'web' | 'yandex' | 'vk';
+  readonly id: 'web' | 'yandex' | 'vk' | 'telegram';
   ready(): Promise<void>;              // «игра загрузилась» (требование Яндекс Игр)
   getPlayerName(): Promise<string | null>;
   showInterstitial(): Promise<void>;   // межстраничная реклама, резолв после закрытия
@@ -26,15 +26,18 @@ interface PlatformAdapter {
 | `web.ts` | Просто браузер | localStorage, без рекламы и авторизации |
 | `yandex.ts` | Яндекс Игры | SDK `/sdk.js`, LoadingAPI.ready, реклама, игрок, облачные сейвы |
 | `vk.ts` | VK Mini Apps | vk-bridge: VKWebAppInit, VKWebAppGetUserInfo, VKWebAppStorage, VKWebAppShowNativeAds |
+| `telegram.ts` | Telegram Mini Apps | глобальный `window.Telegram.WebApp`: ready/expand, initDataUnsafe, CloudStorage |
 
 ## Выбор платформы (`index.ts`)
 
 `createAdapter()` смотрит на URL и user-agent: Яндекса — (`yandex`, `ysdk`,
 `ya.ru`, UA `YaApp`; просто YaBrowser считается вебом), VK — (`vk_app_id` в URL
-запуска мини-аппа, ссылки `vk.com` / `vk.ru`). Яндексовский SDK подгружается
-скриптом, vk-bridge — динамическим импортом (отдельный чанк, грузится только
-внутри VK). При любом сбое молча откатываемся на `WebAdapter` — игра никогда
-не падает из-за площадки.
+запуска мини-аппа, ссылки `vk.com` / `vk.ru`), Telegram — (`t.me`, `telegram`,
+параметры `tgWebApp*`). Яндексовский SDK подгружается скриптом, vk-bridge —
+динамическим импортом (отдельный чанк, грузится только внутри VK), Telegram
+берётся из глобального объекта (скрипт `telegram-web-app.js` подключён в
+`client/index.html`). При любом сбое молча откатываемся на `WebAdapter` —
+игра никогда не падает из-за площадки.
 
 ## VK Mini Apps (`vk.ts`)
 
@@ -44,29 +47,44 @@ interface PlatformAdapter {
   `localStorage`. Удаления в VK Storage нет: `remove()` записывает пустую
   строку, а `get()` читает пустую строку как «ключа нет» (null).
 - `showInterstitial()` → `VKWebAppShowNativeAds` с `ad_format: 'interstitial'`;
-  страховочный таймаут 20 с, зависнуть игра не может.
+  страховочный таймаут настраивается (боевые 20 с), зависнуть игра не может.
 
 Публикация черновика VK-аппа — через vk.com/editapp?act=settings (см. задачу
 в ROADMAP, Этап 3).
+
+## Telegram Mini Apps (`telegram.ts`)
+
+- `ready()` → `WebApp.ready()` + `expand()`.
+- `getPlayerName()` → `initDataUnsafe.user`: username, иначе имя + фамилия;
+  нет пользователя → null.
+- Хранилище → `CloudStorage.getItem/setItem/removeItem` (облачное), при сбое
+  или молчании — фолбэк на `localStorage`. Каждый вызов под страховочным
+  таймаутом (боевые 3 с, настраивается вторым аргументом конструктора):
+  колбэки Telegram могут не прийти никогда, зависнуть игра не может.
+- `showInterstitial()` — пустая операция: официальной interstitial-рекламы
+  в Mini Apps API нет (монетизация Telegram — боты/партнёрки, позже).
+
+Публикация: BotFather → /newapp (Menu Button Web App) на развёрнутый HTTPS-URL
+(см. docs/DEPLOY.md).
 
 ## Реклама
 
 Межстраничная реклама показывается между партиями (кнопки «Меню» и «Ещё раз»
 на экране результата), но не чаще одного раза в 3 минуты
 (`AD_MIN_INTERVAL_MS = 180000`). `showInterstitial()` резолвится после
-закрытия ролика, при ошибке SDK или по страховочному таймауту 20 с —
+закрытия ролика, при ошибке SDK или по страховочному таймауту —
 зависнуть игра не может.
 
 ## Хранилище
 
 На Яндексе — `player.getData/setData` (облачные сейвы игрока), в VK —
-`VKWebAppStorage`, при сбое или неавторизованном игроке — фолбэк на
-`localStorage`. Сейчас через хранилище идёт тема; туда же в будущем лягут
-настройки и локальный рейтинг.
+`VKWebAppStorage`, в Telegram — `CloudStorage`, при сбое или неавторизованном
+игроке — фолбэк на `localStorage`. Сейчас через хранилище идёт тема; туда же
+в будущем лягут настройки и локальный рейтинг.
 
 ## Тесты
 
-`client/tests/platform.test.ts` покрывает `detectPlatform` (Яндекс, VK, веб),
-`shouldShowInterstitial` (интервал), `YandexAdapter` и `VKAdapter`
-(имя игрока, облачное хранилище, фолбэки, рекламные колбэки и guard-таймаут)
-на фейковых SDK/bridge.
+`client/tests/platform.test.ts` покрывает `detectPlatform` (Яндекс, VK,
+Telegram, веб), `shouldShowInterstitial` (интервал), `YandexAdapter`,
+`VKAdapter` и `TelegramAdapter` (имя игрока, облачное хранилище, фолбэки,
+guard-таймауты, рекламные колбэки) на фейковых SDK/bridge/WebApp.

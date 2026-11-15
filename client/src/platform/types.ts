@@ -1,4 +1,4 @@
-export type PlatformId = 'web' | 'yandex' | 'vk';
+export type PlatformId = 'web' | 'yandex' | 'vk' | 'telegram';
 
 /** Ключ-значение хранилище платформы (облачное, где доступно). */
 export interface PlatformStorage {
@@ -8,9 +8,9 @@ export interface PlatformStorage {
 }
 
 /**
- * Абстракция платформы: веб, Яндекс Игры, VK Mini Apps, позже OK/Telegram.
- * Игровой код общается только с этим интерфейсом — конкретная площадка
- * подключается адаптером, логика игры не меняется.
+ * Абстракция платформы: веб, Яндекс Игры, VK Mini Apps, Telegram WebApp,
+ * позже OK. Игровой код общается только с этим интерфейсом — конкретная
+ * площадка подключается адаптером, логика игры не меняется.
  */
 export interface PlatformAdapter {
   readonly id: PlatformId;

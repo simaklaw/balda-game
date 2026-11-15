@@ -44,7 +44,10 @@
       облачное хранилище VKWebAppStorage с фолбэком на localStorage,
       нативная interstitial-реклама; определение площадки по URL (vk_app_id,
       vk.com/vk.ru); ~24 теста платформенного слоя
-- [ ] Одноклассники → Telegram WebApp
+- [x] Telegram WebApp (Mini Apps): ready/expand, имя игрока (initDataUnsafe),
+      облачное CloudStorage с фолбэком и страховочным таймаутом; скрипт
+      telegram-web-app.js в index.html; определение площадки (t.me, tgWebApp*)
+- [ ] Одноклассники
 
 ## Этап 4 — Мультиплеер (server/)
 - [x] Authoritative-сервер: Node.js + ws, комнаты (быстрый матч, приватная по

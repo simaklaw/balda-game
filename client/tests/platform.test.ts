@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { detectPlatform, shouldShowInterstitial } from '../src/platform';
+import { TelegramAdapter } from '../src/platform/telegram';
+import type { TelegramWebAppLike } from '../src/platform/telegram';
 import { VKAdapter } from '../src/platform/vk';
 import type { VkBridgeApi } from '../src/platform/vk';
 import { YandexAdapter } from '../src/platform/yandex';
@@ -22,6 +24,11 @@ describe('detectPlatform', () => {
     expect(detectPlatform('https://example.com/?vk_app_id=51234567', 'Mozilla/5.0')).toBe('vk');
   });
 
+  it('распознаёт Telegram Mini Apps по URL', () => {
+    expect(detectPlatform('https://t.me/balda_bot/app', 'Mozilla/5.0')).toBe('telegram');
+    expect(detectPlatform('https://example.com/#tgWebAppData=user%3Danya', 'Mozilla/5.0')).toBe('telegram');
+  });
+
   it('остальное — веб', () => {
     expect(detectPlatform('https://example.com/', 'Mozilla/5.0')).toBe('web');
     expect(detectPlatform('https://example.com/', 'Mozilla/5.0 YaBrowser/24.7')).toBe('web');
@@ -36,6 +43,105 @@ describe('shouldShowInterstitial', () => {
   it('соблюдает минимальный интервал', () => {
     expect(shouldShowInterstitial(1000, 1000 + 179999)).toBe(false);
     expect(shouldShowInterstitial(1000, 1000 + 180000)).toBe(true);
+  });
+});
+
+describe('TelegramAdapter', () => {
+  /** Фейковый WebApp с синхронным CloudStorage. */
+  const makeWebApp = (
+    store: Record<string, string>,
+    user?: { first_name?: string; last_name?: string; username?: string },
+  ): TelegramWebAppLike & { events: string[] } => {
+    const events: string[] = [];
+    return {
+      events,
+      ready: () => events.push('ready'),
+      expand: () => events.push('expand'),
+      initDataUnsafe: user === undefined ? undefined : { user },
+      CloudStorage: {
+        getItem: (key, cb) => {
+          events.push('getItem:' + key);
+          cb(null, key in store ? store[key] : null);
+        },
+        setItem: (key, value, cb) => {
+          events.push('setItem:' + key);
+          store[key] = value;
+          cb(null);
+        },
+        removeItem: (key, cb) => {
+          events.push('removeItem:' + key);
+          delete store[key];
+          cb(null);
+        },
+      },
+    };
+  };
+
+  it('ready() вызывает ready и expand, не падает при сбое', async () => {
+    const webApp = makeWebApp({});
+    await expect(new TelegramAdapter(webApp).ready()).resolves.toBeUndefined();
+    expect(webApp.events).toContain('ready');
+    expect(webApp.events).toContain('expand');
+  });
+
+  it('имя игрока: username, иначе имя + фамилия, иначе null', async () => {
+    const withUsername = makeWebApp({}, { first_name: 'Аня', username: 'anya' });
+    await expect(new TelegramAdapter(withUsername).getPlayerName()).resolves.toBe('anya');
+    const withName = makeWebApp({}, { first_name: 'Аня', last_name: 'Смирнова' });
+    await expect(new TelegramAdapter(withName).getPlayerName()).resolves.toBe('Аня Смирнова');
+    const anonymous = makeWebApp({});
+    await expect(new TelegramAdapter(anonymous).getPlayerName()).resolves.toBeNull();
+  });
+
+  it('storage читает и пишет через CloudStorage', async () => {
+    const store: Record<string, string> = { best: '120' };
+    const adapter = new TelegramAdapter(makeWebApp(store));
+    await expect(adapter.storage.get('best')).resolves.toBe('120');
+    await adapter.storage.set('games', '7');
+    expect(store['games']).toBe('7');
+    await adapter.storage.remove('games');
+    expect('games' in store).toBe(false);
+  });
+
+  it('сбой CloudStorage уходит в фолбэк, не падая', async () => {
+    const failing: TelegramWebAppLike = {
+      ready: () => undefined,
+      CloudStorage: {
+        getItem: (_key, cb) => cb(new Error('нет сети'), null),
+        setItem: (_key, _value, cb) => cb(new Error('нет сети')),
+        removeItem: (_key, cb) => cb(new Error('нет сети')),
+      },
+    };
+    const adapter = new TelegramAdapter(failing);
+    await expect(adapter.storage.get('missing')).resolves.toBeNull();
+    await expect(adapter.storage.set('k', 'v')).resolves.toBeUndefined();
+    await expect(adapter.storage.remove('k')).resolves.toBeUndefined();
+  });
+
+  it('молчащий CloudStorage не подвешивает storage (guard-таймаут)', async () => {
+    const hanging: TelegramWebAppLike = {
+      ready: () => undefined,
+      CloudStorage: {
+        getItem: () => undefined,
+        setItem: () => undefined,
+        removeItem: () => undefined,
+      },
+    };
+    const adapter = new TelegramAdapter(hanging, 10);
+    await expect(adapter.storage.get('k')).resolves.toBeNull();
+    await expect(adapter.storage.set('k', 'v')).resolves.toBeUndefined();
+    await expect(adapter.storage.remove('k')).resolves.toBeUndefined();
+  });
+
+  it('без CloudStorage storage работает через фолбэк', async () => {
+    const adapter = new TelegramAdapter(makeWebApp({}));
+    await expect(adapter.storage.get('missing')).resolves.toBeNull();
+    await expect(adapter.storage.set('k', 'v')).resolves.toBeUndefined();
+    await expect(adapter.storage.remove('k')).resolves.toBeUndefined();
+  });
+
+  it('showInterstitial — пустая операция (в Telegram нет interstitial API)', async () => {
+    await expect(new TelegramAdapter(makeWebApp({})).showInterstitial()).resolves.toBeUndefined();
   });
 });
 

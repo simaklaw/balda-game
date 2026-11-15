@@ -3,6 +3,7 @@ import { WebAdapter } from './web';
 import { loadYandexSdk, YandexAdapter } from './yandex';
 import { VKAdapter } from './vk';
 import type { VkBridgeApi } from './vk';
+import { TelegramAdapter, getTelegramWebApp } from './telegram';
 
 export type { PlatformAdapter, PlatformId, PlatformStorage } from './types';
 
@@ -17,6 +18,8 @@ export function detectPlatform(rawUrl: string, userAgent: string): PlatformId {
   if (ua.includes('yandex') || ua.includes('yaapp')) return 'yandex';
   // VK Mini Apps: iframe-запуск содержит vk_app_id, обычные ссылки — vk.com/vk.ru.
   if (url.includes('vk_app_id') || url.includes('vk.com') || url.includes('vk.ru')) return 'vk';
+  // Telegram Mini Apps: запуск через t.me или параметры tgWebApp* в URL/хэше.
+  if (url.includes('t.me') || url.includes('telegram') || url.includes('tgwebapp')) return 'telegram';
   return 'web';
 }
 
@@ -50,6 +53,11 @@ export async function createAdapter(): Promise<PlatformAdapter> {
     } catch {
       /* фолбэк на веб */
     }
+  }
+  if (hint === 'telegram') {
+    // WebApp уже создан скриптом telegram-web-app.js в index.html.
+    const webApp = getTelegramWebApp();
+    if (webApp !== null) return new TelegramAdapter(webApp);
   }
   return new WebAdapter();
 }
