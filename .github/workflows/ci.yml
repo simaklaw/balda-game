@@ -15,6 +15,8 @@ jobs:
           node-version: 20
       - run: npm ci || npm install
       - run: npm run lint --if-present
+      - name: Typecheck
+        run: npm run typecheck --if-present
       - name: Test
         run: |
           set -o pipefail
@@ -28,6 +30,23 @@ jobs:
             echo "::error::$line"
           done
       - run: npm run build --if-present
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci || npm install
+      - name: Smoke — два WS-клиента играют против сервера
+        run: |
+          npx tsx server/src/index.ts &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3001/health >/dev/null && break
+            sleep 1
+          done
+          node scripts/smoke.mjs
 
   docker:
     runs-on: ubuntu-latest

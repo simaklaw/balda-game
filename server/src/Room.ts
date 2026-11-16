@@ -1,6 +1,6 @@
 import { DEFAULT_CONFIG, Game } from '@balda/shared';
 import type { Dawg, GameConfig, MoveErrorCode, MoveInput } from '@balda/shared';
-import { calcElo, CHIPS_PER_WIN } from './elo';
+import { calcElo, kFactor, CHIPS_PER_WIN } from './elo';
 import type { RoomState, ServerMessage } from './protocol';
 
 /** Окно переподключения по умолчанию, мс. */
@@ -10,8 +10,28 @@ export const TURN_MS = 120_000;
 /** Рейтинг нового игрока по умолчанию. */
 export const DEFAULT_RATING = 1000;
 
-/** Стартовые слова по размеру поля (длина = размеру). */
-const INITIAL_WORDS: Record<number, string> = { 3: 'бал', 5: 'слово', 7: 'чемодан' };
+/**
+ * Пулы стартовых слов по размеру поля (длина слова = размеру поля).
+ * Случайный выбор освежает партии; инвариант длины покрыт тестом.
+ */
+export const START_WORDS: Record<number, readonly string[]> = {
+  3: ['бал', 'кот', 'дом', 'сон', 'лес'],
+  5: ['слово', 'книга', 'порог', 'тропа'],
+  7: ['чемодан', 'молоток', 'столица'],
+};
+
+/** Случайное стартовое слово для поля size; для неизвестного размера — ошибка. */
+export function pickStartWord(size: number, rnd: () => number = Math.random): string {
+  const pool = START_WORDS[size];
+  if (pool === undefined || pool.length === 0) {
+    throw new Error('Нет стартовых слов для поля ' + size + '×' + size);
+  }
+  const word = pool[Math.floor(rnd() * pool.length)]!;
+  if (word.length !== size) {
+    throw new Error('Стартовое слово "' + word + '" не подходит для поля ' + size + '×' + size);
+  }
+  return word;
+}
 
 /** Тексты ошибок хода для игрока. */
 const ERROR_TEXT: Record<MoveErrorCode, string> = {
@@ -43,6 +63,8 @@ interface Slot {
   /** Секрет сессии: reconnect принимается только с ним (защита от угона слота). */
   token: string;
   rating: number;
+  /** Сыгранных рейтинговых партий — для коэффициента K Эло. */
+  games: number;
   conn: PlayerConnection | null;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -59,6 +81,8 @@ export interface RoomOptions {
   onFinished?: (room: Room) => void;
   /** Комната опустела (все отключились до старта). */
   onEmpty?: (room: Room) => void;
+  /** Стартовое слово (тесты); иначе — случайное из пула START_WORDS. */
+  startWord?: string;
 }
 
 export interface RoomOutcome {
@@ -96,7 +120,7 @@ export class Room {
     this.onFinished = options.onFinished;
     this.onEmpty = options.onEmpty;
     const config = options.config ?? DEFAULT_CONFIG;
-    const initialWord = INITIAL_WORDS[config.boardSize] ?? 'слово';
+    const initialWord = options.startWord ?? pickStartWord(config.boardSize);
     this.game = new Game(options.dawg, config, initialWord);
   }
 
@@ -136,6 +160,7 @@ export class Room {
     conn: PlayerConnection,
     name: string,
     rating: number = DEFAULT_RATING,
+    games = 0,
   ): { playerId: string; token: string; index: number } {
     const index = this.slots.findIndex((s) => s === null);
     if (index === -1) throw new Error('Комната заполнена');
@@ -144,6 +169,7 @@ export class Room {
       name: sanitizeName(name, index),
       token: crypto.randomUUID(),
       rating,
+      games,
       conn,
       reconnectTimer: null,
     };
@@ -319,7 +345,8 @@ export class Room {
     const [r0, r1] = this.ratings;
     const winner = this.game.winner;
     const score0: 0 | 0.5 | 1 = winner === null ? 0.5 : winner === 0 ? 1 : 0;
-    const [n0, n1] = calcElo(r0, r1, score0);
+    const [g0, g1] = [this.slots[0]?.games ?? 0, this.slots[1]?.games ?? 0];
+    const [n0, n1] = calcElo(r0, r1, score0, kFactor(g0, r0), kFactor(g1, r1));
     return {
       newRatings: [n0, n1],
       deltaRating: [n0 - r0, n1 - r1],

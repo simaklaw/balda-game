@@ -54,6 +54,7 @@ function makeRoom(extra: { turnMs?: number; reconnectMs?: number } = {}): Room {
     config: CONFIG,
     turnMs: extra.turnMs ?? 0,
     reconnectMs: extra.reconnectMs ?? 0,
+    startWord: 'бал',
   });
 }
 
@@ -241,4 +242,5 @@ describe('Matchmaker', () => {
     store.dispose();
   });
 });
+
 

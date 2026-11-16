@@ -45,14 +45,14 @@ export class Matchmaker {
       this.waiting = this.createRoomObject();
     }
     const room = this.waiting;
-    const res = room.addPlayer(conn, name, this.ratingFor(name));
+    const res = room.addPlayer(conn, name, this.ratingFor(name), this.gamesFor(name));
     return { room, ...res };
   }
 
   /** Приватная комната по коду: создаёт и сажает автора. */
   createRoom(conn: PlayerConnection, name: string): JoinResult {
     const room = this.createRoomObject();
-    const res = room.addPlayer(conn, name, this.ratingFor(name));
+    const res = room.addPlayer(conn, name, this.ratingFor(name), this.gamesFor(name));
     return { room, ...res };
   }
 
@@ -60,7 +60,7 @@ export class Matchmaker {
   joinRoom(roomId: string, conn: PlayerConnection, name: string): JoinResult | null {
     const room = this.rooms.get(roomId.trim().toUpperCase());
     if (!room || room.isFull || room.isFinished) return null;
-    const res = room.addPlayer(conn, name, this.ratingFor(name));
+    const res = room.addPlayer(conn, name, this.ratingFor(name), this.gamesFor(name));
     return { room, ...res };
   }
 
@@ -91,6 +91,11 @@ export class Matchmaker {
 
   private ratingFor(name: string): number {
     return this.options.players?.get(name)?.rating ?? this.ratings.get(nameKey(name)) ?? START_RATING;
+  }
+
+  /** Сколько рейтинговых партий уже сыграл игрок (для K Эло); без профиля — 0. */
+  private gamesFor(name: string): number {
+    return this.options.players?.get(name)?.games ?? 0;
   }
 
   private createRoomObject(): Room {

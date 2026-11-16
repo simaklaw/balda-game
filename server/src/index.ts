@@ -1,12 +1,12 @@
 import { createServer } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
-import type { CellPos } from '@balda/shared';
 import { loadDictionary } from './dictionary';
 import { Matchmaker } from './Matchmaker';
 import { parseClientMessage } from './protocol';
-import type { ClientMessage, ServerMessage } from './protocol';
+import type { ServerMessage } from './protocol';
 import { PlayerStore } from './PlayerStore';
 import type { PlayerConnection } from './Room';
 
@@ -17,6 +17,19 @@ const DICT_PATH =
 const PLAYERS_PATH =
   process.env.PLAYERS_PATH ??
   fileURLToPath(new URL('../../data/players.json', import.meta.url));
+
+/** Защита WSS (CSWSH): разрешённые Origin через запятую. Пусто — только same-origin. */
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter((s) => s.length > 0);
+/** Максимум одновременных соединений с одного IP. */
+const MAX_SOCKETS_PER_IP = Number(process.env.MAX_SOCKETS_PER_IP ?? 8);
+/** Лимит сообщений с одного соединения за окно (защита от флуда). */
+const MAX_MESSAGES_PER_WINDOW = Number(process.env.MAX_MESSAGES_PER_WINDOW ?? 60);
+const MESSAGE_WINDOW_MS = 10_000;
+/** Максимальный размер кадра: игровые сообщения — сотни байт. */
+const MAX_PAYLOAD = 16 * 1024;
 
 const { dawg, size: dictSize, source: dictSource } = loadDictionary(DICT_PATH);
 
@@ -33,29 +46,27 @@ interface Session {
 }
 
 const sessions = new WeakMap<WebSocket, Session>();
+const socketsPerIp = new Map<string, number>();
 
 function sendTo(socket: WebSocket, msg: ServerMessage): void {
   if (socket.readyState === 1) socket.send(JSON.stringify(msg));
 }
 
-function isCellPos(value: unknown): value is CellPos {
-  if (typeof value !== 'object' || value === null) return false;
-  const v = value as { row?: unknown; col?: unknown };
-  return (
-    typeof v.row === 'number' && Number.isInteger(v.row) &&
-    typeof v.col === 'number' && Number.isInteger(v.col)
-  );
-}
-
-function extractMove(msg: ClientMessage): { path: CellPos[]; cell: CellPos; letter: string } | null {
-  if (msg.type !== 'move') return null;
-  const path = (msg as { path?: unknown }).path;
-  const cell = (msg as { cell?: unknown }).cell;
-  const letter = (msg as { letter?: unknown }).letter;
-  if (!Array.isArray(path) || path.length === 0 || path.length > 49) return null;
-  if (!path.every(isCellPos) || !isCellPos(cell)) return null;
-  if (typeof letter !== 'string' || [...letter].length !== 1) return null;
-  return { path, cell, letter };
+/**
+ * Origin-check против кросс-сайтового WebSocket hijacking:
+ * браузер всегда шлёт Origin — пускаем только свои площадки и same-origin
+ * (за Caddy/nginx). Не-браузерные клиенты (без Origin) не страдают.
+ */
+function originAllowed(origin: string, req: IncomingMessage): boolean {
+  if (origin === '') return true;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  const host = req.headers.host;
+  if (host === undefined) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }
 
 const httpServer = createServer((req, res) => {
@@ -74,14 +85,54 @@ const httpServer = createServer((req, res) => {
   res.end();
 });
 
-const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+const wss = new WebSocketServer({
+  server: httpServer,
+  path: '/ws',
+  maxPayload: MAX_PAYLOAD,
+  verifyClient: (info, callback) => {
+    if (originAllowed(info.origin, info.req)) {
+      callback(true);
+    } else {
+      callback(false, 403, 'Origin запрещён');
+    }
+  },
+});
 
-wss.on('connection', (socket: WebSocket) => {
+wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
+  // Лимит соединений с одного IP: дешёвая защита от исчерпания ресурсов.
+  const ip = req.socket.remoteAddress ?? 'unknown';
+  const current = socketsPerIp.get(ip) ?? 0;
+  if (current >= MAX_SOCKETS_PER_IP) {
+    socket.close(1008, 'Слишком много соединений');
+    return;
+  }
+  socketsPerIp.set(ip, current + 1);
+  socket.on('close', () => {
+    const count = socketsPerIp.get(ip) ?? 1;
+    if (count <= 1) socketsPerIp.delete(ip);
+    else socketsPerIp.set(ip, count - 1);
+  });
+
   const conn: PlayerConnection = {
     send: (msg) => sendTo(socket, msg),
   };
 
+  // Окно флуда: больше MAX_MESSAGES_PER_WINDOW за MESSAGE_WINDOW_MS — закрытие.
+  let windowStart = Date.now();
+  let messagesInWindow = 0;
+
   socket.on('message', (raw) => {
+    const now = Date.now();
+    if (now - windowStart > MESSAGE_WINDOW_MS) {
+      windowStart = now;
+      messagesInWindow = 0;
+    }
+    messagesInWindow += 1;
+    if (messagesInWindow > MAX_MESSAGES_PER_WINDOW) {
+      socket.close(1008, 'Слишком много сообщений');
+      return;
+    }
+
     const msg = parseClientMessage(raw.toString());
     if (msg === null) {
       sendTo(socket, { type: 'error', message: 'Неизвестное сообщение' });
@@ -135,16 +186,11 @@ wss.on('connection', (socket: WebSocket) => {
         case 'move': {
           const session = sessions.get(socket);
           const room = session ? matchmaker.getRoom(session.roomId) : undefined;
-          const move = extractMove(msg);
           if (!session || !room) {
             sendTo(socket, { type: 'error', message: 'Вы не в комнате' });
             break;
           }
-          if (move === null) {
-            sendTo(socket, { type: 'error', message: 'Некорректный ход' });
-            break;
-          }
-          room.move(session.playerId, move);
+          room.move(session.playerId, { path: msg.path, cell: msg.cell, letter: msg.letter });
           break;
         }
         case 'pass': {
@@ -172,7 +218,7 @@ wss.on('connection', (socket: WebSocket) => {
           break;
         }
         case 'profile': {
-          const name = String(msg.name).trim().slice(0, 24);
+          const name = msg.name.trim().slice(0, 24);
           sendTo(socket, { type: 'profile', name, profile: matchmaker.getProfile(name) });
           break;
         }
@@ -213,4 +259,3 @@ function shutdown(): void {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-

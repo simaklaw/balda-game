@@ -1,433 +1,276 @@
 /**
- * Anti-cheat system for Balda game
- * Includes input telemetry, behavioral checks, and shadow pool validation
+ * Античит «Балды»: телеметрия ввода, поведенческие проверки, Shadow Pool.
+ *
+ * Принцип (аудит Qwen, §10.6–10.7): ложный бан честного игрока хуже
+ * пропущенного бота. Пороги консервативные, реакция ступенчатая:
+ * мониторинг → предупреждение → shadow/ban только при устойчивом паттерне.
+ * Короткие слова вводятся за доли секунды честно — скорость подозрительна
+ * только для длинных слов.
  */
 
 import type { MoveInput, CellPos } from './types';
 
 export type { MoveInput } from './types';
 
-/**
- * Telemetry data for a single move
- */
+/** Телеметрия одного хода, собираемая на клиенте. */
 export interface MoveTelemetry {
-  /** Timestamp when move was initiated */
+  /** Момент начала хода. */
   timestamp: number;
-  /** Time taken to select the path (ms) */
+  /** Время построения пути (мс). */
   pathSelectionTime: number;
-  /** Time taken to choose the letter (ms) */
+  /** Время выбора буквы (мс). */
   letterSelectionTime: number;
-  /** Total move time from start to submission (ms) */
+  /** Общее время хода (мс). */
   totalTime: number;
-  /** Mouse/touch movement pattern hash */
+  /** Хеш траектории движения. */
   movementHash: string;
-  /** Number of path corrections */
+  /** Сколько раз игрок корректировал путь. */
   pathCorrections: number;
 }
 
-/**
- * Player behavior profile for anti-cheat
- */
+/** Поведенческий профиль игрока (скользящее окно последних ходов). */
 export interface PlayerProfile {
-  /** Average time between moves (ms) */
-  avgMoveTime: number;
-  /** Standard deviation of move times */
-  moveTimeStdDev: number;
-  /** Average path selection time (ms) */
-  avgPathSelectionTime: number;
-  /** Average letter selection time (ms) */
-  avgLetterSelectionTime: number;
-  /** Number of suspicious moves detected */
-  suspiciousCount: number;
-  /** Last move timestamp */
-  lastMoveTime: number;
-  /** Move count */
+  /** Число ходов за всё время. */
   moveCount: number;
+  /** Общее время последних ходов (окно WINDOW). */
+  recentTotalTimes: number[];
+  /** Флаги подозрительности последних ходов (окно WINDOW). */
+  recentSuspicious: boolean[];
+  lastMoveTime: number;
 }
 
-/**
- * Shadow pool entry for server-side validation
- */
+/** Запись Shadow Pool. */
 export interface ShadowEntry {
-  /** The move input */
+  playerId: number;
   move: MoveInput;
-  /** Client-reported word */
-  clientWord: string;
-  /** Server-validated word (if different) */
-  serverWord: string | null;
-  /** Whether move was accepted */
+  movementHash: string;
   accepted: boolean;
-  /** Suspicion score (0-1) */
   suspicion: number;
-  /** Reason for suspicion */
-  reason: string | null;
-  /** Timestamp */
+  reason: SuspicionReason;
   timestamp: number;
 }
 
-/**
- * Anti-cheat configuration
- */
 export interface AntiCheatConfig {
-  /** Minimum move time considered valid (ms) */
-  minMoveTime: number;
-  /** Maximum move time before warning (ms) */
-  maxMoveTime: number;
-  /** Minimum path selection time (ms) - too fast = suspicious */
+  /** Ход быстрее этого (мс) у длинного слова подозрителен. */
+  instantMoveMs: number;
+  /** Минимальная длина слова, для которой мгновенный ход подозрителен. */
+  instantMoveMinWord: number;
+  /** Путь выбрали быстрее этого (мс) — подозрительно. */
   minPathSelectionTime: number;
-  /** Minimum letter selection time (ms) */
+  /** Букву выбрали быстрее этого (мс) — подозрительно. */
   minLetterSelectionTime: number;
-  /** Threshold for suspicion score to flag a move */
+  /** Порог suspicion для предупреждения. */
   suspicionThreshold: number;
-  /** Maximum suspicious moves before penalty */
-  maxSuspiciousMoves: number;
-  /** Shadow pool size */
+  /** Порог suspicion для блокировки. */
+  blockThreshold: number;
+  /** Столько подозрительных ходов в окне → устойчивый паттерн (блокировка). */
+  maxSuspiciousInWindow: number;
+  /** Размер Shadow Pool. */
   shadowPoolSize: number;
-  /** Enable behavioral analysis */
   enableBehavioral: boolean;
-  /** Enable shadow pool */
   enableShadowPool: boolean;
 }
 
-/**
- * Default anti-cheat configuration
- */
 export const DEFAULT_ANTI_CHEAT_CONFIG: AntiCheatConfig = {
-  minMoveTime: 500, // 0.5 seconds minimum
-  maxMoveTime: 30000, // 30 seconds maximum
-  minPathSelectionTime: 200, // 200ms minimum for path selection
-  minLetterSelectionTime: 100, // 100ms minimum for letter selection
+  instantMoveMs: 400,
+  instantMoveMinWord: 6,
+  minPathSelectionTime: 150,
+  minLetterSelectionTime: 80,
   suspicionThreshold: 0.7,
-  maxSuspiciousMoves: 5,
+  blockThreshold: 0.9,
+  maxSuspiciousInWindow: 3,
   shadowPoolSize: 100,
   enableBehavioral: true,
   enableShadowPool: true,
 };
 
-/**
- * Suspicion reasons
- */
+/** Окно поведенческого анализа: последние N ходов, минимум истории для паттернов. */
+export const WINDOW_SIZE = 20;
+export const MIN_HISTORY_FOR_PATTERN = 15;
+
 export type SuspicionReason =
-  | 'TOO_FAST'
-  | 'TOO_SLOW'
+  | 'INSTANT_MOVE'
   | 'PATH_TOO_FAST'
   | 'LETTER_TOO_FAST'
   | 'PATTERN_MISMATCH'
-  | 'SHADOW_MISMATCH'
-  | 'IMPOSSIBLE_MOVE'
+  | 'REPLAYED_TRAJECTORY'
   | null;
 
-/**
- * Result of anti-cheat check
- */
 export interface AntiCheatResult {
-  /** Whether the move is considered legitimate */
+  /** Ход считается легитимным, пока действие не BLOCK. */
   legitimate: boolean;
-  /** Suspicion score (0-1) */
+  /** Оценка подозрительности 0–1. */
   suspicion: number;
-  /** Reason for suspicion */
   reason: SuspicionReason;
-  /** Recommended action */
-  action: 'ALLOW' | 'WARN' | 'BLOCK' | 'SHADOW_CHECK';
-  /** Telemetry data */
+  /** Мониторинг → предупреждение → блокировка. */
+  action: 'ALLOW' | 'WARN' | 'BLOCK';
   telemetry: MoveTelemetry | null;
 }
 
-/**
- * Anti-cheat system for tracking and validating player behavior
- */
+const emptyResult = (telemetry: MoveTelemetry | null): AntiCheatResult => ({
+  legitimate: true,
+  suspicion: 0,
+  reason: null,
+  action: 'ALLOW',
+  telemetry,
+});
+
+function emptyProfile(): PlayerProfile {
+  return { moveCount: 0, recentTotalTimes: [], recentSuspicious: [], lastMoveTime: 0 };
+}
+
+/** Античит-система: профили игроков + Shadow Pool. */
 export class AntiCheatSystem {
   private readonly config: AntiCheatConfig;
-  private readonly profiles: Map<number, PlayerProfile> = new Map();
+  private readonly profiles = new Map<number, PlayerProfile>();
   private shadowPool: ShadowEntry[] = [];
-  private moveCounter: number = 0;
+  private moveCounter = 0;
 
   constructor(config: Partial<AntiCheatConfig> = {}) {
     this.config = { ...DEFAULT_ANTI_CHEAT_CONFIG, ...config };
   }
 
-  /**
-   * Record telemetry for a move
-   */
-  recordTelemetry(playerId: number, telemetry: MoveTelemetry): void {
-    let profile = this.profiles.get(playerId);
-    if (!profile) {
-      profile = {
-        avgMoveTime: 0,
-        moveTimeStdDev: 0,
-        avgPathSelectionTime: 0,
-        avgLetterSelectionTime: 0,
-        suspiciousCount: 0,
-        lastMoveTime: telemetry.timestamp,
-        moveCount: 0,
-      };
-      this.profiles.set(playerId, profile);
-    }
-
-    // Update profile statistics
-    profile.moveCount++;
-    profile.lastMoveTime = telemetry.timestamp;
-
-    // Simple moving average for demonstration
-    const alpha = 0.2; // Smoothing factor
-    profile.avgMoveTime = profile.avgMoveTime * (1 - alpha) + telemetry.totalTime * alpha;
-    profile.avgPathSelectionTime = profile.avgPathSelectionTime * (1 - alpha) + telemetry.pathSelectionTime * alpha;
-    profile.avgLetterSelectionTime = profile.avgLetterSelectionTime * (1 - alpha) + telemetry.letterSelectionTime * alpha;
-  }
-
-  /**
-   * Check a move for cheating
-   */
+  /** Проверить ход; телеметрия может отсутствовать (старые клиенты). */
   checkMove(
     playerId: number,
     move: MoveInput,
     telemetry: MoveTelemetry | null = null,
-    game: unknown | null = null,
   ): AntiCheatResult {
-    const result: AntiCheatResult = {
-      legitimate: true,
-      suspicion: 0,
-      reason: null,
-      action: 'ALLOW',
-      telemetry,
-    };
+    const result = emptyResult(telemetry);
+    if (!this.config.enableBehavioral && !this.config.enableShadowPool) return result;
 
-    if (!this.config.enableBehavioral && !this.config.enableShadowPool) {
-      return result;
-    }
+    const profile = this.profileFor(playerId);
 
-    // Check 1: Move time analysis
-    if (telemetry) {
-      this.recordTelemetry(playerId, telemetry);
-
-      // Too fast - very suspicious
-      if (telemetry.totalTime < this.config.minMoveTime) {
-        result.suspicion += 0.8;
-        result.reason = 'TOO_FAST';
-      }
-
-      // Too slow (might be bot or AFK)
-      if (telemetry.totalTime > this.config.maxMoveTime) {
-        result.suspicion += 0.8;
-        if (result.reason === null) result.reason = 'TOO_SLOW';
-      }
-
-      // Path selection too fast
-      if (telemetry.pathSelectionTime < this.config.minPathSelectionTime && telemetry.pathSelectionTime > 0) {
-        result.suspicion += 0.9;
-        if (result.reason === null) result.reason = 'PATH_TOO_FAST';
-      }
-
-      // Letter selection too fast
-      if (telemetry.letterSelectionTime < this.config.minLetterSelectionTime && telemetry.letterSelectionTime > 0) {
-        result.suspicion += 0.8;
-        if (result.reason === null) result.reason = 'LETTER_TOO_FAST';
+    if (telemetry !== null) {
+      this.recordTelemetry(profile, telemetry.totalTime);
+      this.checkTiming(move, telemetry, result);
+      this.checkPattern(profile, telemetry, result);
+      if (this.config.enableShadowPool) {
+        this.checkShadowPool(playerId, move, telemetry, result);
       }
     }
 
-    // Check 2: Shadow pool validation (if enabled and game provided)
-    if (this.config.enableShadowPool && game && telemetry) {
-      const shadowResult = this.validateWithShadowPool(playerId, move, game, telemetry);
-      if (!shadowResult.legitimate) {
-        result.suspicion += shadowResult.suspicion * 0.5;
-        if (result.reason === null) {
-          result.reason = shadowResult.reason;
-        }
-      }
-    }
-
-    // Check 3: Behavioral pattern analysis
-    const profile = this.profiles.get(playerId);
-    if (profile && this.config.enableBehavioral) {
-      const patternResult = this.checkBehavioralPattern(playerId, move, telemetry, profile);
-      if (!patternResult.legitimate) {
-        result.suspicion += patternResult.suspicion * 0.3;
-        if (result.reason === null) {
-          result.reason = patternResult.reason;
-        }
-      }
-    }
-
-    // Clamp suspicion to 0-1
     result.suspicion = Math.min(1, Math.max(0, result.suspicion));
 
-    // Determine action based on suspicion
-    if (result.suspicion >= this.config.suspicionThreshold) {
+    // Устойчивый паттерн: несколько подозрительных ходов в окне.
+    const suspiciousInWindow = profile.recentSuspicious.filter(Boolean).length;
+    if (
+      result.suspicion >= this.config.suspicionThreshold ||
+      suspiciousInWindow >= this.config.maxSuspiciousInWindow
+    ) {
+      result.reason ??= 'PATTERN_MISMATCH';
+    }
+    if (result.suspicion >= this.config.blockThreshold || suspiciousInWindow >= this.config.maxSuspiciousInWindow) {
+      result.action = 'BLOCK';
       result.legitimate = false;
+    } else if (result.suspicion >= this.config.suspicionThreshold) {
       result.action = 'WARN';
     }
 
-    if (result.suspicion >= 0.9) {
-      result.action = 'BLOCK';
-    }
-
-    // Update suspicious count for any suspicion > 0
-    if (result.suspicion > 0) {
-      const profile = this.profiles.get(playerId);
-      if (profile) {
-        profile.suspiciousCount++;
-        if (profile.suspiciousCount >= this.config.maxSuspiciousMoves) {
-          result.action = 'BLOCK';
-          result.legitimate = false;
-        }
-      }
-    }
-
-    this.moveCounter++;
+    profile.recentSuspicious.push(result.suspicion >= 0.5);
+    if (profile.recentSuspicious.length > WINDOW_SIZE) profile.recentSuspicious.shift();
+    this.moveCounter += 1;
     return result;
   }
 
-  /**
-   * Validate move using shadow pool
-   */
-  private validateWithShadowPool(
-    _playerId: number,
+  /** Правила таймингов (§10.7): мгновенные ДЛИННЫЕ слова, слишком быстрые путь/буква. */
+  private checkTiming(move: MoveInput, telemetry: MoveTelemetry, result: AntiCheatResult): void {
+    const wordLength = move.path.length;
+    // Мгновенный ход: подозрителен только для длинных слов — короткие
+    // честный игрок вводит за доли секунды.
+    if (
+      wordLength >= this.config.instantMoveMinWord &&
+      telemetry.totalTime < this.config.instantMoveMs
+    ) {
+      result.suspicion += 0.5;
+      result.reason = 'INSTANT_MOVE';
+    }
+    if (telemetry.pathSelectionTime > 0 && telemetry.pathSelectionTime < this.config.minPathSelectionTime) {
+      result.suspicion += 0.3;
+      result.reason ??= 'PATH_TOO_FAST';
+    }
+    if (telemetry.letterSelectionTime > 0 && telemetry.letterSelectionTime < this.config.minLetterSelectionTime) {
+      result.suspicion += 0.3;
+      result.reason ??= 'LETTER_TOO_FAST';
+    }
+    // Медленный ход — не чит (АФК, думает): не штрафуем.
+  }
+
+  /** Паттерн «внезапно в разы быстрее собственного темпа» — при достаточной истории. */
+  private checkPattern(profile: PlayerProfile, telemetry: MoveTelemetry, result: AntiCheatResult): void {
+    if (profile.recentTotalTimes.length < MIN_HISTORY_FOR_PATTERN) return;
+    const avg =
+      profile.recentTotalTimes.reduce((sum, t) => sum + t, 0) / profile.recentTotalTimes.length;
+    if (telemetry.totalTime < avg * 0.3) {
+      result.suspicion += 0.3;
+      result.reason ??= 'PATTERN_MISMATCH';
+    }
+  }
+
+  /** Shadow Pool: повтор чужой/своей траектории под другим ходом. */
+  private checkShadowPool(
+    playerId: number,
     move: MoveInput,
-    _game: unknown,
-    _telemetry: MoveTelemetry,
-  ): AntiCheatResult {
-    const result: AntiCheatResult = {
-      legitimate: true,
-      suspicion: 0,
-      reason: null,
-      action: 'ALLOW',
-      telemetry: _telemetry,
-    };
-
-    // Add to shadow pool
-    this.addToShadowPool(_playerId, move, _telemetry);
-
-    // If we have history for this player, check for inconsistencies
-    const playerMoves = this.shadowPool.filter(() => true);
-
-    // Simple check: if player consistently makes moves that are too perfect
-    if (playerMoves.length >= 10) {
-      // Check if all moves are high-scoring
-      // This would require game state, which we don't have here
-      // So this is a placeholder for the concept
+    telemetry: MoveTelemetry,
+    result: AntiCheatResult,
+  ): void {
+    const replayed = this.shadowPool.some(
+      (e) => e.playerId === playerId && e.movementHash === telemetry.movementHash && !samePath(e.move.path, move.path),
+    );
+    if (replayed) {
+      result.suspicion += 0.4;
+      result.reason ??= 'REPLAYED_TRAJECTORY';
     }
-
-    return result;
-  }
-
-  /**
-   * Add move to shadow pool
-   */
-  addToShadowPool(_playerId: number, move: MoveInput, _telemetry: MoveTelemetry): void {
-    if (!this.config.enableShadowPool) return;
-
-    // For now, just store the move
-    // In a real implementation, we'd store more data and do more analysis
-    const entry: ShadowEntry = {
+    this.shadowPool.push({
+      playerId,
       move,
-      clientWord: '', // Would be set based on the move
-      serverWord: null,
+      movementHash: telemetry.movementHash,
       accepted: true,
-      suspicion: 0,
-      reason: null,
+      suspicion: result.suspicion,
+      reason: result.reason,
       timestamp: Date.now(),
-    };
-
-    this.shadowPool.push(entry);
-
-    // Keep pool size limited
+    });
     if (this.shadowPool.length > this.config.shadowPoolSize) {
       this.shadowPool.shift();
     }
   }
 
-  /**
-   * Check for behavioral patterns that indicate cheating
-   */
-  private checkBehavioralPattern(
-    playerId: number,
-    move: MoveInput,
-    telemetry: MoveTelemetry | null,
-    profile: PlayerProfile,
-  ): AntiCheatResult {
-    const result: AntiCheatResult = {
-      legitimate: true,
-      suspicion: 0,
-      reason: null,
-      action: 'ALLOW',
-      telemetry,
-    };
-
-    // Check 1: Consistently too fast
-    if (telemetry && profile.moveCount > 5) {
-      if (telemetry.totalTime < profile.avgMoveTime * 0.5) {
-        result.suspicion += 0.4;
-        result.reason = 'PATTERN_MISMATCH';
-      }
+  private profileFor(playerId: number): PlayerProfile {
+    let profile = this.profiles.get(playerId);
+    if (profile === undefined) {
+      profile = emptyProfile();
+      this.profiles.set(playerId, profile);
     }
-
-    // Check 2: Path selection patterns
-    // If path is complex but selected very quickly
-    if (telemetry && move.path.length > 5 && telemetry.pathSelectionTime < 300) {
-      result.suspicion += 0.3;
-      result.reason = 'PATH_TOO_FAST';
-    }
-
-    // Check 3: Movement hash consistency
-    // If movement patterns are identical for different moves
-    // This would require storing previous hashes
-
-    return result;
+    return profile;
   }
 
-  /**
-   * Generate a simple movement hash based on path
-   */
-  generateMovementHash(path: CellPos[]): string {
-    const hashParts = path.map((p) => `${p.row},${p.col}`).join('|');
-    // Simple hash - in production use a proper hash function
-    let hash = 0;
-    for (let i = 0; i < hashParts.length; i++) {
-      const char = hashParts.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return hash.toString(16);
+  private recordTelemetry(profile: PlayerProfile, totalTime: number): void {
+    profile.moveCount += 1;
+    profile.lastMoveTime = Date.now();
+    profile.recentTotalTimes.push(totalTime);
+    if (profile.recentTotalTimes.length > WINDOW_SIZE) profile.recentTotalTimes.shift();
   }
 
-  /**
-   * Get player profile
-   */
+  /** Записи Shadow Pool игрока. */
+  getShadowPool(playerId: number): ShadowEntry[] {
+    return this.shadowPool.filter((e) => e.playerId === playerId);
+  }
+
   getPlayerProfile(playerId: number): PlayerProfile | null {
     return this.profiles.get(playerId) ?? null;
   }
 
-  /**
-   * Get shadow pool entries for a player
-   */
-  getShadowPool(_playerId: number): ShadowEntry[] {
-    // Filter by player - would need to track playerId in entries
-    return this.shadowPool.filter(() => true); // Placeholder
-  }
-
-  /**
-   * Reset the anti-cheat system
-   */
   reset(): void {
     this.profiles.clear();
     this.shadowPool = [];
     this.moveCounter = 0;
   }
 
-  /**
-   * Get statistics
-   */
-  getStats(): {
-    totalMoves: number;
-    totalPlayers: number;
-    shadowPoolSize: number;
-    suspiciousMoves: number;
-  } {
+  getStats(): { totalMoves: number; totalPlayers: number; shadowPoolSize: number; suspiciousMoves: number } {
     let suspiciousMoves = 0;
     for (const profile of this.profiles.values()) {
-      suspiciousMoves += profile.suspiciousCount;
+      suspiciousMoves += profile.recentSuspicious.filter(Boolean).length;
     }
-
     return {
       totalMoves: this.moveCounter,
       totalPlayers: this.profiles.size,
@@ -437,27 +280,24 @@ export class AntiCheatSystem {
   }
 }
 
-/**
- * Create a new anti-cheat system with default configuration
- */
+function samePath(a: readonly CellPos[], b: readonly CellPos[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((p, i) => p.row === b[i]!.row && p.col === b[i]!.col);
+}
+
 export function createAntiCheatSystem(config?: Partial<AntiCheatConfig>): AntiCheatSystem {
   return new AntiCheatSystem(config);
 }
 
-/**
- * Telemetry collector for client-side tracking
- */
+/** Клиентский сборщик телеметрии хода. */
 export class MoveTelemetryCollector {
-  private startTime: number = 0;
-  private pathStartTime: number = 0;
-  private letterStartTime: number = 0;
-  private pathCorrections: number = 0;
+  private startTime = 0;
+  private pathStartTime = 0;
+  private letterStartTime = 0;
+  private pathCorrections = 0;
   private path: CellPos[] = [];
   private movementParts: string[] = [];
 
-  /**
-   * Start tracking a new move
-   */
   start(): void {
     this.startTime = Date.now();
     this.pathCorrections = 0;
@@ -465,63 +305,42 @@ export class MoveTelemetryCollector {
     this.movementParts = [];
   }
 
-  /**
-   * Start path selection
-   */
   startPathSelection(): void {
     this.pathStartTime = Date.now();
   }
 
-  /**
-   * Add a cell to the path
-   */
   addPathCell(cell: CellPos): void {
     this.path.push(cell);
-    this.movementParts.push(`${cell.row},${cell.col}`);
+    this.movementParts.push(cell.row + ',' + cell.col);
   }
 
-  /**
-   * Record a path correction
-   */
   recordCorrection(): void {
-    this.pathCorrections++;
+    this.pathCorrections += 1;
   }
 
-  /**
-   * Start letter selection
-   */
   startLetterSelection(): void {
     this.letterStartTime = Date.now();
   }
 
-  /**
-   * Complete the move and get telemetry
-   */
   complete(): MoveTelemetry {
     const endTime = Date.now();
     const pathEndTime = this.letterStartTime || endTime;
-
     return {
       timestamp: this.startTime,
       pathSelectionTime: Math.max(0, pathEndTime - this.pathStartTime),
       letterSelectionTime: Math.max(0, endTime - this.letterStartTime),
       totalTime: Math.max(0, endTime - this.startTime),
-      movementHash: this.generateHash(),
+      movementHash: MoveTelemetryCollector.hash(this.movementParts.join('|')),
       pathCorrections: this.pathCorrections,
     };
   }
 
-  /**
-   * Generate movement hash
-   */
-  private generateHash(): string {
-    const movementString = this.movementParts.join('|');
+  /** FNV-подобный 32-битный хеш траектории. */
+  static hash(movementString: string): string {
     let hash = 0;
     for (let i = 0; i < movementString.length; i++) {
-      const char = movementString.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
+      hash = ((hash << 5) - hash + movementString.charCodeAt(i)) | 0;
     }
-    return hash.toString(16);
+    return (hash >>> 0).toString(16);
   }
 }

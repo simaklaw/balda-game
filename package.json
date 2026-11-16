@@ -9,8 +9,11 @@
     "dev": "npm run dev --workspace client",
     "test": "vitest run",
     "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspace client",
-    "build:dawg": "npm run build:dawg --workspace shared"
+    "build:dawg": "npm run build:dawg --workspace shared",
+    "start:server": "npm run start --workspace server",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

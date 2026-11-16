@@ -6,11 +6,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Сначала только манифесты — слой с зависимостями кэшируется.
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 COPY client/package.json client/
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
 # Исходники: общий код, сервер и словарь (DICT_PATH по умолчанию
 # указывает на client/public/dict/words.txt).
@@ -18,10 +18,15 @@ COPY shared/ shared/
 COPY server/ server/
 COPY client/public/dict/words.txt client/public/dict/words.txt
 
+# Непривилегированный пользователь: процесс в контейнере не root.
+RUN addgroup -S balda && adduser -S balda -G balda && mkdir -p /data && chown -R balda:balda /data
+
 ENV PORT=3001 \
     PLAYERS_PATH=/data/players.json
 # Профили игроков переживают пересоздание контейнера: том на /data.
 VOLUME ["/data"]
+
+USER balda
 
 EXPOSE 3001
 
