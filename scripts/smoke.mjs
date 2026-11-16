@@ -39,6 +39,8 @@ function connect() {
       resolve({
         send: (obj) => ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)),
         close: () => ws.close(),
+        /** Убрать накопившиеся сообщения (например, state до joined). */
+        drain: () => queue.splice(0),
         expect: (name, predicate, timeoutMs = TIMEOUT_MS) =>
           new Promise((res) => {
             const queuedIndex = queue.findIndex(predicate);
@@ -87,6 +89,7 @@ async function main() {
   const joinedA = await a.expect('joined (A)', isJoined);
   if (joinedA !== null && joinedA.state.status === 'waiting') ok('A в очереди, статус waiting');
   else fail('A: ожидался joined/waiting');
+  a.drain(); // state(waiting) приходит до joined и не должен попасть в следующие шаги
 
   // 2. Второй игрок — матч начинается.
   b.send({ type: 'quick-match', name: 'SmokeB' });
@@ -108,22 +111,23 @@ async function main() {
   const err2 = await a.expect('error на невалидный ход', (m) => isError(m) && m !== err1);
   if (err2 !== null) ok('невалидный ход отклонён: ' + err2.message);
 
-  // 5. Pass передаёт ход.
+  // 5. Pass передаёт ход: ждём именно состояние с ходом игрока B.
   a.send({ type: 'pass' });
-  const stateAfterPass = await a.expect('state после pass', (m) => m.type === 'state' && m !== stateA);
+  const stateAfterPass = await a.expect('state после pass', (m) => m.type === 'state' && m.state.currentPlayer === 1);
   if (stateAfterPass !== null && stateAfterPass.state.currentPlayer === 1) {
     ok('pass передал ход игроку B');
   } else {
     fail('pass не передал ход');
   }
 
-  // 6. Профиль по имени: у нового игрока профиля ещё нет — null тоже корректный ответ.
+  // 6. Профиль по имени: у нового игрока профиля ещё нет — null/undefined тоже корректный ответ.
   a.send({ type: 'profile', name: 'SmokeA' });
   const profile = await a.expect('profile', isProfile);
-  if (profile !== null && (profile.profile === null || typeof profile.profile.rating === 'number')) {
-    ok('профиль получен' + (profile.profile ? ': рейтинг ' + profile.profile.rating : ' (новый игрок — ещё не играл)'));
+  const p = profile !== null ? profile.profile : undefined;
+  if (p === null || p === undefined || typeof p.rating === 'number') {
+    ok('профиль получен' + (p ? ': рейтинг ' + p.rating : ' (новый игрок — ещё не играл)'));
   } else {
-    fail('профиль не получен');
+    fail('профиль не получен: ' + JSON.stringify(profile));
   }
 
   // 7. Reconnect с чужим токеном отклоняется.
