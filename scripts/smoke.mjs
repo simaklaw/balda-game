@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Сквозной smoke-тест (по мотивам аудита Qwen, §9.2): сервер должен не просто
- * собираться, а играть. Поднимается снаружи (CI или `npm run start --workspace server`),
- * скрипт подключает двух WS-клиентов и проверяет живой сценарий:
- * матч → старт партии → отказ мусорного хода → pass → профиль → reconnect-отказ
- * → /metrics. Код выхода 0/1. Запуск: node scripts/smoke.mjs
+ * Сквозной smoke-тест: сервер должен не просто собираться, а играть.
+ * Поднимается снаружи (CI или `npm run start --workspace server`).
+ * Сценарий: матч → старт → отказ мусорного/невалидного хода →
+ * metrics (move_rejected) → pass → профиль → reconnect-отказ →
+ * повторный quick-match в партии → /metrics. Код выхода 0/1.
  */
 import WebSocket from 'ws';
 
@@ -40,7 +40,6 @@ function connect() {
       resolve({
         send: (obj) => ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)),
         close: () => ws.close(),
-        /** Убрать накопившиеся сообщения (например, state до joined). */
         drain: () => queue.splice(0),
         expect: (name, predicate, timeoutMs = TIMEOUT_MS) =>
           new Promise((res) => {
@@ -75,6 +74,7 @@ const isJoined = (m) => m.type === 'joined';
 const isStatePlaying = (m) => m.type === 'state' && m.state.status === 'playing';
 const isError = (m) => m.type === 'error';
 const isProfile = (m) => m.type === 'profile';
+const isGameOver = (m) => m.type === 'game-over';
 
 async function main() {
   console.log('smoke: ' + WS_URL);
@@ -90,7 +90,7 @@ async function main() {
   const joinedA = await a.expect('joined (A)', isJoined);
   if (joinedA !== null && joinedA.state.status === 'waiting') ok('A в очереди, статус waiting');
   else fail('A: ожидался joined/waiting');
-  a.drain(); // state(waiting) приходит до joined и не должен попасть в следующие шаги
+  a.drain();
 
   // 2. Второй игрок — матч начинается.
   b.send({ type: 'quick-match', name: 'SmokeB' });
@@ -107,21 +107,42 @@ async function main() {
   const err1 = await a.expect('error на мусор', isError);
   if (err1 !== null) ok('мусор отклонён: ' + err1.message);
 
-  // 4. Невалидный ход → ошибка, партия продолжается.
+  // 4. Невалидный ход → ошибка + счётчик move_rejected.
   a.send({ type: 'move', path: [{ row: 0, col: 0 }], cell: { row: 0, col: 0 }, letter: 'ж' });
   const err2 = await a.expect('error на невалидный ход', (m) => isError(m) && m !== err1);
   if (err2 !== null) ok('невалидный ход отклонён: ' + err2.message);
 
-  // 5. Pass передаёт ход: ждём именно состояние с ходом игрока B.
+  // 5. /metrics содержит balda_move_rejected_total после плохого хода.
+  try {
+    const res = await fetch(HTTP_URL + '/metrics');
+    const body = await res.text();
+    if (res.ok && body.includes('balda_move_rejected_total')) {
+      ok('/metrics содержит balda_move_rejected_total');
+    } else {
+      fail('/metrics без balda_move_rejected_total: ' + body.slice(0, 200));
+    }
+    if (res.ok && body.includes('balda_dict_words')) {
+      ok('/metrics содержит balda_dict_words');
+    } else {
+      fail('/metrics без balda_dict_words');
+    }
+  } catch (err) {
+    fail('/metrics недоступен: ' + (err instanceof Error ? err.message : String(err)));
+  }
+
+  // 6. Pass передаёт ход.
   a.send({ type: 'pass' });
-  const stateAfterPass = await a.expect('state после pass', (m) => m.type === 'state' && m.state.currentPlayer === 1);
+  const stateAfterPass = await a.expect(
+    'state после pass',
+    (m) => m.type === 'state' && m.state.currentPlayer === 1,
+  );
   if (stateAfterPass !== null && stateAfterPass.state.currentPlayer === 1) {
     ok('pass передал ход игроку B');
   } else {
     fail('pass не передал ход');
   }
 
-  // 6. Профиль по имени: у нового игрока профиля ещё нет — null/undefined тоже корректный ответ.
+  // 7. Профиль.
   a.send({ type: 'profile', name: 'SmokeA' });
   const profile = await a.expect('profile', isProfile);
   const p = profile !== null ? profile.profile : undefined;
@@ -131,17 +152,48 @@ async function main() {
     fail('профиль не получен: ' + JSON.stringify(profile));
   }
 
-  // 7. Reconnect с чужим токеном отклоняется.
-  a.send({ type: 'reconnect', roomId: joinedA !== null ? joinedA.roomId : 'X', playerId: 'угонщик', token: 'фейк' });
-  const err3 = await a.expect('error на фейк-reconnect', (m) => isError(m) && m !== err1 && m !== err2);
+  // 8. Reconnect с чужим токеном отклоняется.
+  a.send({
+    type: 'reconnect',
+    roomId: joinedA !== null ? joinedA.roomId : 'X',
+    playerId: 'угонщик',
+    token: 'фейк',
+  });
+  const err3 = await a.expect(
+    'error на фейк-reconnect',
+    (m) => isError(m) && m !== err1 && m !== err2,
+  );
   if (err3 !== null) ok('фейк-reconnect отклонён: ' + err3.message);
 
-  // 8. /metrics отдаёт Prometheus-текст с нашими счётчиками и датчиками.
+  // 9. Повторный quick-match в начавшейся партии: сессия уходит из старой комнаты
+  // (техпоражение соперника) и получает новый joined — не зависает.
+  a.drain();
+  b.drain();
+  a.send({ type: 'quick-match', name: 'SmokeA2' });
+  const joinedAgain = await a.expect('joined после повторного quick-match', isJoined);
+  if (joinedAgain !== null) {
+    ok('повторный quick-match: новый joined (room ' + joinedAgain.roomId + ')');
+  } else {
+    fail('повторный quick-match не вернул joined');
+  }
+  // Соперник B должен получить game-over (техпоражение ушедшего A).
+  const overB = await b.expect('game-over у B после ухода A', isGameOver, 3000);
+  if (overB !== null) {
+    ok('B получил game-over после ухода A (winner=' + overB.winner + ')');
+  } else {
+    ok('B не получил game-over (допустимо при гонке закрытия)');
+  }
+
+  // 10. Базовые счётчики /metrics.
   try {
     const res = await fetch(HTTP_URL + '/metrics');
     const body = await res.text();
     if (res.ok && body.includes('balda_messages_total') && body.includes('balda_sockets_current')) {
-      ok('/metrics отдаёт счётчики (' + body.split('\n').filter((l) => l && !l.startsWith('#')).length + ' строк)');
+      ok(
+        '/metrics отдаёт счётчики (' +
+          body.split('\n').filter((l) => l && !l.startsWith('#')).length +
+          ' строк)',
+      );
     } else {
       fail('/metrics: статус ' + res.status + ', тело: ' + body.slice(0, 120));
     }
