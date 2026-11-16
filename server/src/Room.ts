@@ -351,14 +351,22 @@ export class Room {
       slot.reconnectTimer = null;
     }
     this.slots[index] = null;
-    if (this.playerCount === 0) this.onEmpty?.(this);
+    if (this.playerCount === inter) this.onEmpty?.(this);
   }
 
   /** Пересчёт Эло и фишек по факту завершения партии. */
   private computeOutcome(): RoomOutcome {
     const [r0, r1] = this.ratings;
     const winner = this.game.winner;
-    const score0: 0 | 0.5 | 1 = winner === null ? 0.5 : winner === 0 ? 1 : 0;
+    // Ничья: рейтинг и фишки не меняются (явный контракт протокола).
+    if (winner === null) {
+      return {
+        newRatings: [r0, r1],
+        deltaRating: [0, 0],
+        deltaChips: [0, 0],
+      };
+    }
+    const score0: 0 | 1 = winner === 0 ? 1 : 0;
     const [g0, g1] = [this.slots[0]?.games ?? 0, this.slots[1]?.games ?? 0];
     const [n0, n1] = calcElo(r0, r1, score0, kFactor(g0, r0), kFactor(g1, r1));
     return {
