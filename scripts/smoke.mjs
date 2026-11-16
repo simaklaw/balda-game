@@ -20,7 +20,7 @@ const fail = (msg) => {
 
 /** Клиент с очередью входящих сообщений и ожиданием по предикату. */
 function connect() {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     const ws = new WebSocket(WS_URL);
     const queue = [];
     const waiters = [];
