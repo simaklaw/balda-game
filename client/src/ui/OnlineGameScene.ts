@@ -75,14 +75,13 @@ export class OnlineGameScene {
   private readonly keyboard: KeyboardView;
   private controlWidth: number;
   private opponentCell: CellPos | null = null;
-  private opponentPath: CellPos[] = [];
   private opponentTimer: ReturnType<typeof setTimeout> | null = null;
   private boardX = 0;
   private boardCellSize = 0;
   private previewFits = true;
   private destroyed = false;
   private dragActive = false;
-  private popUntil = 0;
+  private popStart = 0;
   private popCell: CellPos | null = null;
   private shakeUntil = 0;
   private shakeActive = false;
@@ -90,7 +89,8 @@ export class OnlineGameScene {
   private gameOverOverlay: Container | null = null;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastHistoryLen = 0;
+  private historyLen = 0;
+  private lastGameOverMsg: Extract<ServerMessage, { type: 'game-over' }> | null = null;
 
   constructor(
     app: Application,
@@ -103,7 +103,7 @@ export class OnlineGameScene {
     this.callbacks = callbacks;
     this.state = initialState;
     this.board = new StateBoard(initialState);
-    this.lastHistoryLen = initialState.history.length;
+    this.historyLen = initialState.history.length;
     this.selection = new SelectionModel(
       this.board,
       initialState.size === 3 ? 3 : 4,
@@ -248,11 +248,7 @@ export class OnlineGameScene {
 
   private onTicker = (): void => {
     this.updateTimers();
-    if (this.popUntil > 0 && performance.now() >= this.popUntil) {
-      this.popUntil = 0;
-      this.popCell = null;
-      this.refresh();
-    }
+    this.tickPop();
   };
 
   private hitCell(x: number, y: number): CellPos | null {
@@ -265,8 +261,12 @@ export class OnlineGameScene {
     return { row, col };
   }
 
+  private get isMyTurn(): boolean {
+    return this.state.status === 'playing' && this.state.currentPlayer === this.state.you;
+  }
+
   private onPointerDown(e: { global: { x: number; y: number } }): void {
-    if (this.gameOverShown) return;
+    if (this.gameOverShown || !this.isMyTurn) return;
     this.dragActive = true;
     const cell = this.hitCell(e.global.x, e.global.y);
     if (!cell) return;
@@ -287,12 +287,12 @@ export class OnlineGameScene {
   }
 
   private onPass(): void {
-    if (this.gameOverShown) return;
+    if (!this.isMyTurn || this.gameOverShown) return;
     this.net.send({ type: 'pass' });
   }
 
   private onSubmit(): void {
-    if (this.gameOverShown) return;
+    if (!this.isMyTurn || this.gameOverShown) return;
     const move = this.selection.toMove();
     if (!move) return;
     this.net.send({ type: 'move', ...move });
@@ -331,19 +331,27 @@ export class OnlineGameScene {
   }
 
   private applyState(state: RoomState): void {
-    const prevLen = this.lastHistoryLen;
+    const prevYou = this.state.you;
+    const prevLen = this.historyLen;
     this.state = state;
     this.board.update(state);
-    this.lastHistoryLen = state.history.length;
-    if (state.history.length > prevLen) {
-      const last = state.history[state.history.length - 1]!;
-      if (last.player !== state.you && last.path.length > 0) {
-        this.revealOpponent(last.path, last.cell);
-      }
-      if (last.cell) {
-        this.popCell = last.cell;
-        this.popUntil = performance.now() + POP_MS;
-        this.boardView.setPulse(last.cell.row, last.cell.col, 1.12);
+    this.historyLen = state.history.length;
+    if (state.history.length > prevLen && state.currentPlayer === state.you) {
+      const last = state.history[state.history.length - 1];
+      if (last !== undefined && last.player !== prevYou) {
+        this.opponentCell = { row: last.cell.row, col: last.cell.col };
+        this.startPop(last.cell);
+        if (this.opponentTimer !== null) clearTimeout(this.opponentTimer);
+        this.opponentTimer = setTimeout(() => {
+          this.opponentTimer = null;
+          this.opponentCell = null;
+          this.refresh();
+        }, OPPONENT_REVEAL_MS);
+        this.refresh('Соперник: ' + last.word.toUpperCase() + ' (+' + last.points + ')');
+        this.selection.reset();
+        this.keyboard.visible = false;
+        this.reconnectAttempts = 0;
+        return;
       }
     }
     this.selection.reset();
@@ -355,17 +363,21 @@ export class OnlineGameScene {
     }
   }
 
-  private revealOpponent(path: CellPos[], cell: CellPos): void {
-    if (this.opponentTimer !== null) clearTimeout(this.opponentTimer);
-    this.opponentPath = path;
-    this.opponentCell = cell;
-    this.refresh();
-    this.opponentTimer = setTimeout(() => {
-      this.opponentTimer = null;
-      this.opponentPath = [];
-      this.opponentCell = null;
-      this.refresh();
-    }, OPPONENT_REVEAL_MS);
+  private startPop(cell: CellPos): void {
+    this.popCell = { row: cell.row, col: cell.col };
+    this.popStart = performance.now();
+  }
+
+  private tickPop(): void {
+    if (this.popCell === null) return;
+    const t = (performance.now() - this.popStart) / POP_MS;
+    if (t >= 1) {
+      this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
+      this.popCell = null;
+      return;
+    }
+    const scale = 1 + 0.18 * Math.sin(t * Math.PI);
+    this.boardView.setPulse(this.popCell.row, this.popCell.col, scale);
   }
 
   private updateTimers(): void {
@@ -377,9 +389,7 @@ export class OnlineGameScene {
     const left = this.state.turnDeadline - Date.now();
     this.timerText.text = 'На ход: ' + formatClock(left);
     this.timerText.style.fill =
-      left <= 10_000 && this.state.currentPlayer === this.state.you
-        ? palette().danger
-        : palette().textDim;
+      left <= 10_000 && this.isMyTurn ? palette().danger : palette().textDim;
   }
 
   private refresh(statusOverride?: string): void {
@@ -389,7 +399,7 @@ export class OnlineGameScene {
     const other = this.state.players[this.state.you === 0 ? 1 : 0] ?? { score: 0, name: 'Соперник' };
     if (status === '' && this.state.status === 'waiting') status = 'Ожидание соперника…';
     if (status === '' && this.state.status === 'playing') {
-      status = this.state.currentPlayer === this.state.you ? 'Ваш ход' : 'Ход соперника';
+      status = this.isMyTurn ? 'Ваш ход' : 'Ход соперника';
     }
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
     const wordLabel = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
@@ -404,12 +414,14 @@ export class OnlineGameScene {
         previewLetter: snap.previewLetter,
         path: snap.path,
         aiCell: this.opponentCell,
-        aiPath: this.opponentPath,
-        showPlaceable: this.state.currentPlayer === this.state.you && snap.phase === 'idle',
+        aiPath: [],
+        showPlaceable: this.isMyTurn && snap.phase === 'idle',
       },
     );
-    this.btnOk.setEnabled(this.selection.canSubmit() && this.state.currentPlayer === this.state.you);
-    this.btnPass.setEnabled(this.state.currentPlayer === this.state.you && this.state.status === 'playing');
+    const active = this.isMyTurn && !this.gameOverShown;
+    this.btnOk.setEnabled(active && this.selection.canSubmit());
+    this.btnPass.setEnabled(active);
+    this.btnCancel.setEnabled(active);
     this.updateTimers();
   }
 
@@ -433,12 +445,14 @@ export class OnlineGameScene {
     this.boardView.position.x = this.boardX + Math.sin(now / 30) * 6 * t;
   };
 
-  private lastGameOverMsg: Extract<ServerMessage, { type: 'game-over' }> | null = null;
-
   private showGameOver(msg: Extract<ServerMessage, { type: 'game-over' }>): void {
     if (this.gameOverShown) return;
     this.gameOverShown = true;
-    const over = gameOverText(msg.winner, this.state.you, msg.reason);
+    const you = this.state.you;
+    const winner = msg.winner;
+    const over = gameOverText(winner === null ? null : winner === you ? 0 : 1, msg.reason);
+    const titleColor =
+      over.tone === 'success' ? palette().success : over.tone === 'danger' ? palette().danger : palette().text;
     const width = this.app.screen.width;
     const height = this.app.screen.height;
     const overlay = new Container();
@@ -454,12 +468,11 @@ export class OnlineGameScene {
     overlay.addChild(panel);
     const title = new Text({
       text: over.title,
-      style: { fontFamily: FONT_FAMILY, fontSize: 28, fill: over.color, fontWeight: '700' },
+      style: { fontFamily: FONT_FAMILY, fontSize: 30, fill: titleColor, fontWeight: '700' },
     });
     title.anchor.set(0.5, 0);
     title.position.set(width / 2, panelY + 24);
     overlay.addChild(title);
-    const you = this.state.you;
     const score = msg.scores[you] ?? 0;
     const opponentScore = msg.scores[you === 0 ? 1 : 0] ?? 0;
     const rating = msg.deltaRating[you] ?? 0;
