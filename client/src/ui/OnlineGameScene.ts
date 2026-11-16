@@ -6,6 +6,7 @@ import type { NetClient } from '../net/NetClient';
 import type { RoomState, ServerMessage } from '../net/protocol';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
+import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
 import { computeGameLayout, keyboardMetricsFor } from './layout';
 import { KeyboardView } from './KeyboardView';
@@ -16,6 +17,12 @@ export interface OnlineGameSceneCallbacks {
   onMenu: () => void;
 }
 
+const OPPONENT_REVEAL_MS = 900;
+const POP_MS = 180;
+const SHAKE_MS = 320;
+const RECONNECT_DELAY_MS = 1500;
+const MAX_RECONNECT_ATTEMPTS = 3;
+
 function formatClock(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -23,6 +30,7 @@ function formatClock(ms: number): string {
   return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 }
 
+/** Адаптер снимка RoomState под BoardReader для SelectionModel. */
 class StateBoard implements BoardReader {
   private state: RoomState;
 
@@ -47,7 +55,7 @@ class StateBoard implements BoardReader {
   }
 }
 
-/** Онлайн-партия: состояние с сервера, клиент только вводит ход. */
+/** Онлайн-партия: состояние приходит от сервера, клиент только вводит ход. */
 export class OnlineGameScene {
   readonly view = new Container();
   private readonly app: Application;
@@ -67,11 +75,22 @@ export class OnlineGameScene {
   private readonly keyboard: KeyboardView;
   private controlWidth: number;
   private opponentCell: CellPos | null = null;
+  private opponentPath: CellPos[] = [];
+  private opponentTimer: ReturnType<typeof setTimeout> | null = null;
   private boardX = 0;
   private boardCellSize = 0;
   private previewFits = true;
   private destroyed = false;
   private dragActive = false;
+  private popUntil = 0;
+  private popCell: CellPos | null = null;
+  private shakeUntil = 0;
+  private shakeActive = false;
+  private gameOverShown = false;
+  private gameOverOverlay: Container | null = null;
+  private reconnectAttempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastHistoryLen = 0;
 
   constructor(
     app: Application,
@@ -84,11 +103,17 @@ export class OnlineGameScene {
     this.callbacks = callbacks;
     this.state = initialState;
     this.board = new StateBoard(initialState);
+    this.lastHistoryLen = initialState.history.length;
     this.selection = new SelectionModel(
       this.board,
       initialState.size === 3 ? 3 : 4,
       false,
     );
+
+    this.net.setHandlers({
+      onMessage: (msg) => this.handleMessage(msg),
+      onClose: () => this.scheduleReconnect(),
+    });
 
     this.inputLayer = new Graphics();
     this.inputLayer.eventMode = 'static';
@@ -223,18 +248,12 @@ export class OnlineGameScene {
 
   private onTicker = (): void => {
     this.updateTimers();
+    if (this.popUntil > 0 && performance.now() >= this.popUntil) {
+      this.popUntil = 0;
+      this.popCell = null;
+      this.refresh();
+    }
   };
-
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
-    this.app.ticker.remove(this.onTicker);
-    this.app.stage.off('pointermove', this.stageMove);
-    this.app.stage.off('pointerup', this.stageUp);
-    this.app.stage.off('pointerupoutside', this.stageUp);
-    window.removeEventListener('resize', this.onResize);
-    this.view.destroy({ children: true });
-  }
 
   private hitCell(x: number, y: number): CellPos | null {
     const localX = x - this.boardX;
@@ -247,6 +266,7 @@ export class OnlineGameScene {
   }
 
   private onPointerDown(e: { global: { x: number; y: number } }): void {
+    if (this.gameOverShown) return;
     this.dragActive = true;
     const cell = this.hitCell(e.global.x, e.global.y);
     if (!cell) return;
@@ -267,10 +287,12 @@ export class OnlineGameScene {
   }
 
   private onPass(): void {
+    if (this.gameOverShown) return;
     this.net.send({ type: 'pass' });
   }
 
   private onSubmit(): void {
+    if (this.gameOverShown) return;
     const move = this.selection.toMove();
     if (!move) return;
     this.net.send({ type: 'move', ...move });
@@ -284,6 +306,65 @@ export class OnlineGameScene {
       this.keyboard.visible = false;
       this.refresh();
     }
+  }
+
+  private handleMessage(msg: ServerMessage): void {
+    if (msg.type === 'error') {
+      this.triggerShake();
+      this.refresh(msg.message);
+      return;
+    }
+    if (msg.type === 'state') {
+      this.applyState(msg.state);
+      return;
+    }
+    if (msg.type === 'joined') {
+      this.reconnectAttempts = 0;
+      this.applyState(msg.state);
+      return;
+    }
+    if (msg.type === 'game-over') {
+      this.reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
+      this.lastGameOverMsg = msg;
+      this.showGameOver(msg);
+    }
+  }
+
+  private applyState(state: RoomState): void {
+    const prevLen = this.lastHistoryLen;
+    this.state = state;
+    this.board.update(state);
+    this.lastHistoryLen = state.history.length;
+    if (state.history.length > prevLen) {
+      const last = state.history[state.history.length - 1]!;
+      if (last.player !== state.you && last.path.length > 0) {
+        this.revealOpponent(last.path, last.cell);
+      }
+      if (last.cell) {
+        this.popCell = last.cell;
+        this.popUntil = performance.now() + POP_MS;
+      }
+    }
+    this.selection.reset();
+    this.keyboard.visible = false;
+    this.reconnectAttempts = 0;
+    this.refresh();
+    if (state.status === 'finished' && !this.gameOverShown && this.lastGameOverMsg) {
+      this.showGameOver(this.lastGameOverMsg);
+    }
+  }
+
+  private revealOpponent(path: CellPos[], cell: CellPos): void {
+    if (this.opponentTimer !== null) clearTimeout(this.opponentTimer);
+    this.opponentPath = path;
+    this.opponentCell = cell;
+    this.refresh();
+    this.opponentTimer = setTimeout(() => {
+      this.opponentTimer = null;
+      this.opponentPath = [];
+      this.opponentCell = null;
+      this.refresh();
+    }, OPPONENT_REVEAL_MS);
   }
 
   private updateTimers(): void {
@@ -300,11 +381,15 @@ export class OnlineGameScene {
         : palette().textDim;
   }
 
-  private refresh(): void {
+  private refresh(statusOverride?: string): void {
     const snap = this.selection.snapshot;
-    let status = '';
-    const me = this.state.players[this.state.you] ?? { score: 0 };
-    const other = this.state.players[this.state.you === 0 ? 1 : 0] ?? { score: 0 };
+    let status = statusOverride ?? '';
+    const me = this.state.players[this.state.you] ?? { score: 0, name: 'Вы' };
+    const other = this.state.players[this.state.you === 0 ? 1 : 0] ?? { score: 0, name: 'Соперник' };
+    if (status === '' && this.state.status === 'waiting') status = 'Ожидание соперника…';
+    if (status === '' && this.state.status === 'playing') {
+      status = this.state.currentPlayer === this.state.you ? 'Ваш ход' : 'Ход соперника';
+    }
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
     const wordLabel = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
     if (!this.previewFits && wordLabel !== '') status = wordLabel;
@@ -318,21 +403,130 @@ export class OnlineGameScene {
         previewLetter: snap.previewLetter,
         path: snap.path,
         aiCell: this.opponentCell,
-        aiPath: [],
-        showPlaceable: false,
+        aiPath: this.opponentPath,
+        showPlaceable: this.state.currentPlayer === this.state.you && snap.phase === 'idle',
+        popCell: this.popCell,
       },
     );
-    this.btnOk.setEnabled(this.selection.canSubmit());
+    this.btnOk.setEnabled(this.selection.canSubmit() && this.state.currentPlayer === this.state.you);
+    this.btnPass.setEnabled(this.state.currentPlayer === this.state.you && this.state.status === 'playing');
     this.updateTimers();
   }
 
-  onServerMessage(msg: ServerMessage): void {
-    if (msg.type === 'state') {
-      this.state = msg.state;
-      this.board.update(msg.state);
-      this.selection.reset();
-      this.keyboard.visible = false;
-      this.refresh();
+  private triggerShake(): void {
+    this.shakeUntil = performance.now() + SHAKE_MS;
+    if (!this.shakeActive) {
+      this.shakeActive = true;
+      this.app.ticker.add(this.shakeTicker);
     }
+  }
+
+  private shakeTicker = (): void => {
+    const now = performance.now();
+    if (now >= this.shakeUntil) {
+      this.boardView.position.x = this.boardX;
+      this.shakeActive = false;
+      this.app.ticker.remove(this.shakeTicker);
+      return;
+    }
+    const t = (this.shakeUntil - now) / SHAKE_MS;
+    this.boardView.position.x = this.boardX + Math.sin(now / 30) * 6 * t;
+  };
+
+  private lastGameOverMsg: Extract<ServerMessage, { type: 'game-over' }> | null = null;
+
+  private showGameOver(msg: Extract<ServerMessage, { type: 'game-over' }>): void {
+    if (this.gameOverShown) return;
+    this.gameOverShown = true;
+    const over = gameOverText(msg.winner, this.state.you, msg.reason);
+    const width = this.app.screen.width;
+    const height = this.app.screen.height;
+    const overlay = new Container();
+    const dim = new Graphics();
+    dim.rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.55 });
+    overlay.addChild(dim);
+    const panelWidth = Math.min(320, width - 32);
+    const panelHeight = 220;
+    const panelX = (width - panelWidth) / 2;
+    const panelY = (height - panelHeight) / 2;
+    const panel = new Graphics();
+    panel.roundRect(panelX, panelY, panelWidth, panelHeight, 16).fill({ color: palette().panel });
+    overlay.addChild(panel);
+    const title = new Text({
+      text: over.title,
+      style: { fontFamily: FONT_FAMILY, fontSize: 28, fill: over.color, fontWeight: '700' },
+    });
+    title.anchor.set(0.5, 0);
+    title.position.set(width / 2, panelY + 24);
+    overlay.addChild(title);
+    const you = this.state.you;
+    const score = msg.scores[you] ?? 0;
+    const opponentScore = msg.scores[you === 0 ? 1 : 0] ?? 0;
+    const rating = msg.deltaRating[you] ?? 0;
+    const chips = msg.deltaChips[you] ?? 0;
+    const details = new Text({
+      text:
+        score + ' : ' + opponentScore +
+        '\nРейтинг: ' + (rating >= 0 ? '+' : '') + rating +
+        (chips > 0 ? '  ·  +' + chips + ' фишек' : ''),
+      style: { fontFamily: FONT_FAMILY, fontSize: 18, fill: palette().textDim, align: 'center', lineHeight: 26 },
+    });
+    details.anchor.set(0.5, 0);
+    details.position.set(width / 2, panelY + 84);
+    overlay.addChild(details);
+    if (over.reason !== '') {
+      const reason = new Text({
+        text: over.reason,
+        style: { fontFamily: FONT_FAMILY, fontSize: 14, fill: palette().textDim },
+      });
+      reason.anchor.set(0.5);
+      reason.position.set(width / 2, panelY + 140);
+      overlay.addChild(reason);
+    }
+    const btnMenu = new Button({
+      caption: 'В меню',
+      width: panelWidth - 44,
+      height: 48,
+      fontSize: 20,
+      onTap: () => {
+        setTimeout(() => this.callbacks.onMenu(), 0);
+      },
+    });
+    btnMenu.position.set(panelX + 22, panelY + 160);
+    overlay.addChild(btnMenu);
+    this.gameOverOverlay = overlay;
+    this.view.addChild(overlay);
+  }
+
+  /** Обрыв связи: сервер держит слот 45 секунд — пробуем вернуться. */
+  private scheduleReconnect(): void {
+    if (this.destroyed || this.gameOverShown) return;
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      this.refresh('Соединение потеряно. Обновите страницу.');
+      return;
+    }
+    this.reconnectAttempts += 1;
+    this.refresh('Соединение потеряно, переподключение…');
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.destroyed || this.gameOverShown) return;
+      void this.net.reconnect();
+    }, RECONNECT_DELAY_MS);
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    if (this.opponentTimer !== null) clearTimeout(this.opponentTimer);
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    if (this.shakeActive) {
+      this.shakeActive = false;
+      this.app.ticker.remove(this.shakeTicker);
+    }
+    this.app.ticker.remove(this.onTicker);
+    this.app.stage.off('pointermove', this.stageMove);
+    this.app.stage.off('pointerup', this.stageUp);
+    this.app.stage.off('pointerupoutside', this.stageUp);
+    window.removeEventListener('resize', this.onResize);
+    this.view.destroy({ children: true });
   }
 }
