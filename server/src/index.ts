@@ -126,6 +126,15 @@ const httpServer = createServer((req, res) => {
     return;
   }
   if (req.url === '/metrics') {
+    const token = process.env.METRICS_TOKEN;
+    if (token) {
+      const got = req.headers['x-metrics-token'];
+      if (got !== token) {
+        res.writeHead(403);
+        res.end('forbidden');
+        return;
+      }
+    }
     res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
     res.end(metrics.render());
     return;
