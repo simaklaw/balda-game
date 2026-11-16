@@ -117,11 +117,11 @@ async function main() {
     fail('pass не передал ход');
   }
 
-  // 6. Профиль по имени.
+  // 6. Профиль по имени: у нового игрока профиля ещё нет — null тоже корректный ответ.
   a.send({ type: 'profile', name: 'SmokeA' });
   const profile = await a.expect('profile', isProfile);
-  if (profile !== null && profile.profile !== null && typeof profile.profile.rating === 'number') {
-    ok('профиль получен: рейтинг ' + profile.profile.rating);
+  if (profile !== null && (profile.profile === null || typeof profile.profile.rating === 'number')) {
+    ok('профиль получен' + (profile.profile ? ': рейтинг ' + profile.profile.rating : ' (новый игрок — ещё не играл)'));
   } else {
     fail('профиль не получен');
   }
