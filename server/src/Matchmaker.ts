@@ -17,6 +17,11 @@ export interface MatchmakerOptions {
   reconnectMs?: number;
   /** Постоянное хранилище профилей; без него рейтинг живёт в памяти. */
   players?: PlayerStore;
+  /**
+   * Максимум одновременных комнат (защита памяти от ботов).
+   * Не задан — лимита нет (в тестах); index.ts передаёт env MAX_ROOMS.
+   */
+  maxRooms?: number;
   /** Партия началась (комната заполнилась) — для метрик. */
   onStarted?: (room: Room) => void;
   /** Партия завершилась (после внутренних дел: рейтинги, TTL) — для метрик. */
@@ -68,6 +73,17 @@ export class Matchmaker {
     return { room, ...res };
   }
 
+  /**
+   * Убрать игрока из его текущей комнаты. Вызывается, когда соединение
+   * заводит новую комнату или переподключается в другую: иначе старая
+   * комната остаётся с мёртвым соединением навсегда (утечка памяти).
+   * В начавшейся партии это техпоражение ушедшего — осознанная семантика.
+   */
+  removeFromRoom(roomId: string, playerId: string): void {
+    const room = this.rooms.get(roomId.trim().toUpperCase());
+    if (room !== undefined) room.leave(playerId);
+  }
+
   getRoom(roomId: string): Room | undefined {
     return this.rooms.get(roomId.trim().toUpperCase());
   }
@@ -103,6 +119,10 @@ export class Matchmaker {
   }
 
   private createRoomObject(): Room {
+    const cap = this.options.maxRooms;
+    if (cap !== undefined && this.rooms.size >= cap) {
+      throw new Error('Достигнут лимит комнат — попробуйте позже');
+    }
     const id = this.newId();
     const options: RoomOptions = {
       id,

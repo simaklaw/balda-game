@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { Dawg } from '@balda/shared';
 import { parseClientMessage } from '../src/protocol';
 import { calcElo, kFactor } from '../src/elo';
 import { pickStartWord, START_WORDS } from '../src/Room';
 import { loadDictionary } from '../src/dictionary';
+import { Matchmaker } from '../src/Matchmaker';
+import type { PlayerConnection } from '../src/Room';
+import type { ServerMessage } from '../src/protocol';
+
+class FakeConn implements PlayerConnection {
+  messages: ServerMessage[] = [];
+  send(msg: ServerMessage): void {
+    this.messages.push(msg);
+  }
+}
 
 describe('parseClientMessage (строгий разбор)', () => {
   it('валидные сообщения проходят', () => {
@@ -110,5 +121,65 @@ describe('Эло: коэффициент K по опыту и уровню', () 
     expect(rookie - 1500).toBe(20);
     expect(veteran - 1500).toBe(9);
     expect(rookie - 1500).toBeGreaterThan(veteran - 1500);
+  });
+});
+
+describe('Matchmaker: защита от ботов', () => {
+  const dawg = Dawg.fromWords(['бал', 'ак', 'ол', 'бо', 'сок', 'лак']);
+
+  it('createRoom бросает при достижении лимита комнат', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0, maxRooms: 2 });
+    mm.createRoom(new FakeConn(), 'А');
+    mm.createRoom(new FakeConn(), 'Б');
+    expect(() => mm.createRoom(new FakeConn(), 'В')).toThrow(/лимит комнат/i);
+    mm.dispose();
+  });
+
+  it('quickMatch бросает при лимите, когда ждать негде', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0, maxRooms: 2 });
+    mm.createRoom(new FakeConn(), 'А');
+    mm.createRoom(new FakeConn(), 'Б');
+    expect(() => mm.quickMatch(new FakeConn(), 'Г')).toThrow(/лимит комнат/i);
+    mm.dispose();
+  });
+
+  it('quickMatch при лимите всё ещё садит в ожидающую комнату', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0, maxRooms: 1 });
+    const a = mm.quickMatch(new FakeConn(), 'А');
+    const b = mm.quickMatch(new FakeConn(), 'Б');
+    expect(a.room).toBe(b.room);
+    expect(mm.roomCount).toBe(1);
+    mm.dispose();
+  });
+
+  it('removeFromRoom освобождает старую комнату — утечки мёртвых соединений нет', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0 });
+    const first = mm.createRoom(new FakeConn(), 'А');
+    const second = mm.createRoom(new FakeConn(), 'А');
+    expect(mm.roomCount).toBe(2);
+    // Соединение ушло во вторую комнату: первую освобождаем.
+    mm.removeFromRoom(first.room.id, first.playerId);
+    expect(first.room.playerCount).toBe(0);
+    // Пустая комната удалена через onEmpty — утечки нет.
+    expect(mm.roomCount).toBe(1);
+    expect(second.room.playerCount).toBe(1);
+    mm.dispose();
+  });
+
+  it('removeFromRoom в начавшейся партии — техпоражение ушедшего', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0 });
+    const host = mm.createRoom(new FakeConn(), 'А');
+    const guest = mm.joinRoom(host.room.id, new FakeConn(), 'Б');
+    expect(guest).not.toBeNull();
+    mm.removeFromRoom(host.room.id, host.playerId);
+    expect(host.room.isFinished).toBe(true);
+    expect(host.room.winnerIndex).toBe(1);
+    mm.dispose();
+  });
+
+  it('removeFromRoom для несуществующей комнаты — тихий no-op', () => {
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0 });
+    expect(() => mm.removeFromRoom('ZZZZZ', 'no-such-player')).not.toThrow();
+    mm.dispose();
   });
 });

@@ -29,11 +29,30 @@ curl http://localhost:3001/health
 | `ALLOWED_ORIGINS`       | пусто (только same-origin)          | Разрешённые Origin для WS, через запятую |
 | `MAX_SOCKETS_PER_IP`    | `8`                                 | Лимит одновременных WS-соединений с одного IP |
 | `MAX_MESSAGES_PER_WINDOW` | `60`                              | Лимит сообщений за окно 10 с (флуд → закрытие) |
+| `MAX_ROOMS`             | `256`                               | Лимит одновременных комнат (защита памяти от ботов) |
+| `HTTP_RATE_LIMIT`       | `120`                               | Запросов к `/health` и `/metrics` с одного IP за минуту (429 при превышении) |
 
 За обратным прокси укажите в `ALLOWED_ORIGINS` адреса площадок
 (например, `https://yandex.ru/games,https://games.s3.yandex.net`) — иначе
 браузерные клиенты с чужим Origin получат 403. Не-браузерные клиенты
 (без Origin) не ограничиваются.
+
+## Защита от злоупотреблений (сводка)
+
+- **CSWSH**: WS принимается только с разрешённых Origin (или same-origin).
+- **Соединения**: не больше `MAX_SOCKETS_PER_IP` одновременно с одного IP.
+- **Флуд WS**: больше `MAX_MESSAGES_PER_WINDOW` за 10 с — соединение закрывается
+  (код 1008); кадры больше 16 КБ отбрасываются `maxPayload`.
+- **Комнаты**: не больше `MAX_ROOMS` одновременно; повторный
+  quick-match/create-room с того же соединения освобождает старую комнату
+  (в начавшейся партии это техпоражение ушедшего).
+- **HTTP**: `/health` и `/metrics` лимитируются по IP — `HTTP_RATE_LIMIT`
+  запросов в минуту, дальше 429.
+- **Живучесть**: ошибки соединений и сервера логируются и считаются в
+  `balda_ws_errors_total`, процесс не падает; `uncaughtException` /
+  `unhandledRejection` логируются со счётчиками `balda_uncaught_errors_total` /
+  `balda_unhandled_rejections_total`; таймауты HTTP ограничены
+  (headers 10 с, request 20 с).
 
 ## WSS: HTTPS и защищённый WebSocket
 
@@ -88,4 +107,6 @@ Graceful shutdown: контейнер получает SIGTERM, сервер с�
 В `.github/workflows/ci.yml` три джобы на каждый пуш: `build-test`
 (lint + typecheck + тесты + сборка), `smoke` (сервер играет настоящую партию
 двумя WS-клиентами, включая проверку `/metrics`) и `docker` (`docker build`,
-так как сломанный Dockerfile ловится до деплоя).
+так как сломанный Dockerfile ловится до деплоя). Установка зависимостей —
+строго `npm ci`, без fallback на `npm install`: рассинхрон `package-lock.json`
+ломает CI сразу, а не маскируется.

@@ -6,11 +6,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Сначала только манифесты — слой с зависимостями кэшируется.
+# Без fallback на npm install: рассинхрон package-lock.json должен
+# ломать сборку образа сразу, а не маскироваться «как-нибудь установилось».
 COPY package.json package-lock.json ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 COPY client/package.json client/
-RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 
 # Исходники: общий код, сервер и словарь (DICT_PATH по умолчанию
 # указывает на client/public/dict/words.txt).

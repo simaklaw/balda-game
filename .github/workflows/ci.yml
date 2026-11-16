@@ -13,7 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci || npm install
+      # Без fallback на npm install: рассинхрон package-lock.json должен
+      # ломать CI сразу, а не маскироваться «как-нибудь установилось».
+      - run: npm ci
       - run: npm run lint --if-present
       - name: Typecheck
         run: npm run typecheck --if-present
@@ -40,7 +42,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci || npm install
+      - run: npm ci
       - name: Smoke — два WS-клиента играют против сервера
         run: |
           npx tsx server/src/index.ts > /tmp/server.log 2>&1 &

@@ -9,6 +9,7 @@ import { Metrics } from './metrics';
 import { parseClientMessage } from './protocol';
 import type { ServerMessage } from './protocol';
 import { PlayerStore } from './PlayerStore';
+import { createRateLimiter } from './rateLimit';
 import type { PlayerConnection } from './Room';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -31,6 +32,11 @@ const MAX_MESSAGES_PER_WINDOW = Number(process.env.MAX_MESSAGES_PER_WINDOW ?? 60
 const MESSAGE_WINDOW_MS = 10_000;
 /** Максимальный размер кадра: игровые сообщения — сотни байт. */
 const MAX_PAYLOAD = 16 * 1024;
+/** Максимум одновременных комнат: защита памяти от ботов. */
+const MAX_ROOMS = Number(process.env.MAX_ROOMS ?? 256);
+/** HTTP-лимит: запросов к /health и /metrics с одного IP за минуту. */
+const HTTP_RATE_LIMIT = Number(process.env.HTTP_RATE_LIMIT ?? 120);
+const HTTP_RATE_WINDOW_MS = 60_000;
 
 const { dawg, size: dictSize, source: dictSource } = loadDictionary(DICT_PATH);
 
@@ -44,9 +50,13 @@ const metrics = new Metrics();
 
 const matchmaker = new Matchmaker(dawg, {
   players: playerStore,
+  maxRooms: MAX_ROOMS,
   onStarted: () => metrics.inc('balda_games_started_total'),
   onFinished: () => metrics.inc('balda_games_finished_total'),
 });
+
+// Rate-limit HTTP: /health и /metrics дешёвые, но публичные — limiting по IP.
+const httpLimiter = createRateLimiter({ limit: HTTP_RATE_LIMIT, windowMs: HTTP_RATE_WINDOW_MS });
 
 interface Session {
   roomId: string;
@@ -67,6 +77,19 @@ function sendTo(socket: WebSocket, msg: ServerMessage): void {
 }
 
 /**
+ * Соединение заводит новую комнату (quick-match/create-room/join-room) или
+ * переподключается в другую — старую комнату освобождаем, иначе она остаётся
+ * навсегда с мёртвым соединением (утечка памяти). В начавшейся партии это
+ * техпоражение ушедшего — осознанная семантика ухода из партии.
+ */
+function dropPreviousSession(socket: WebSocket): void {
+  const prev = sessions.get(socket);
+  if (prev === undefined) return;
+  matchmaker.removeFromRoom(prev.roomId, prev.playerId);
+  sessions.delete(socket);
+}
+
+/**
  * Origin-check против кросс-сайтового WebSocket hijacking:
  * браузер всегда шлёт Origin — пускаем только свои площадки и same-origin
  * (за Caddy/nginx). Не-браузерные клиенты (без Origin) не страдают.
@@ -84,6 +107,13 @@ function originAllowed(origin: string | undefined, req: IncomingMessage): boolea
 }
 
 const httpServer = createServer((req, res) => {
+  const ip = req.socket.remoteAddress ?? 'unknown';
+  if (!httpLimiter.allow(ip)) {
+    metrics.inc('balda_http_rate_limited_total');
+    res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Слишком много запросов\n');
+    return;
+  }
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -104,6 +134,12 @@ const httpServer = createServer((req, res) => {
   res.end();
 });
 
+// Жёсткие таймауты HTTP: запросы здесь тривиальные (GET health/metrics),
+// долгие соединения живут в WebSocket и не зависят от этих лимитов.
+httpServer.headersTimeout = 10_000;
+httpServer.requestTimeout = 20_000;
+httpServer.keepAliveTimeout = 30_000;
+
 const wss = new WebSocketServer({
   server: httpServer,
   path: '/ws',
@@ -116,6 +152,12 @@ const wss = new WebSocketServer({
       callback(false, 403, 'Origin запрещён');
     }
   },
+});
+
+// Ошибка сервера WebSocket (порт занят, сокет-сбой) не должна ронять процесс.
+wss.on('error', (err) => {
+  console.error('[server] ошибка WebSocket-сервера:', err);
+  metrics.inc('balda_ws_errors_total');
 });
 
 wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
@@ -133,6 +175,16 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
     const count = socketsPerIp.get(ip) ?? 1;
     if (count <= 1) socketsPerIp.delete(ip);
     else socketsPerIp.set(ip, count - 1);
+  });
+  // Ошибка соединения (сбой TCP, таймаут) без обработчика уносит процесс:
+  // EventEmitter бросает uncaught 'error'. Логируем и закрываем сокет.
+  socket.on('error', () => {
+    metrics.inc('balda_ws_errors_total');
+    try {
+      socket.close(1011, 'Ошибка соединения');
+    } catch {
+      /* сокет уже закрыт */
+    }
   });
 
   const conn: PlayerConnection = {
@@ -166,6 +218,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
     try {
       switch (msg.type) {
         case 'quick-match': {
+          dropPreviousSession(socket);
           const res = matchmaker.quickMatch(conn, msg.name);
           sessions.set(socket, { roomId: res.room.id, playerId: res.playerId });
           metrics.inc('balda_quickmatch_total');
@@ -180,6 +233,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
           break;
         }
         case 'create-room': {
+          dropPreviousSession(socket);
           const res = matchmaker.createRoom(conn, msg.name);
           sessions.set(socket, { roomId: res.room.id, playerId: res.playerId });
           metrics.inc('balda_createroom_total');
@@ -194,6 +248,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
           break;
         }
         case 'join-room': {
+          dropPreviousSession(socket);
           const res = matchmaker.joinRoom(msg.roomId, conn, msg.name);
           if (res === null) {
             sendTo(socket, { type: 'error', message: 'Комната недоступна' });
@@ -238,6 +293,10 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
           if (!room) {
             sendTo(socket, { type: 'error', message: 'Комната не найдена' });
             break;
+          }
+          const prev = sessions.get(socket);
+          if (prev !== undefined && prev.roomId !== room.id) {
+            dropPreviousSession(socket);
           }
           const index = room.reconnect(msg.playerId, msg.token, conn);
           if (index === null) {
@@ -296,3 +355,14 @@ function shutdown(): void {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+// Аварийные ситуации не роняют процесс: в памяти живые партии, падение
+// выбило бы всех игроков разом. Счётчики дают видимость в /metrics.
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaughtException:', err);
+  metrics.inc('balda_uncaught_errors_total');
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandledRejection:', reason);
+  metrics.inc('balda_unhandled_rejections_total');
+});
