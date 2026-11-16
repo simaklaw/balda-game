@@ -30,6 +30,7 @@ curl http://localhost:3001/health
 | `MAX_SOCKETS_PER_IP`    | `8`                                 | Лимит одновременных WS-соединений с одного IP |
 | `MAX_MESSAGES_PER_WINDOW` | `60`                              | Лимит сообщений за окно 10 с (флуд → закрытие) |
 | `MAX_ROOMS`             | `256`                               | Лимит одновременных комнат (защита памяти от ботов) |
+| `METRICS_TOKEN`          | _(пусто)_                           | Если задан — `/metrics` требует заголовок `x-metrics-token`, иначе 403 |
 | `HTTP_RATE_LIMIT`       | `120`                               | Запросов к `/health` и `/metrics` с одного IP за минуту (429 при превышении) |
 
 За обратным прокси укажите в `ALLOWED_ORIGINS` адреса площадок
@@ -47,7 +48,8 @@ curl http://localhost:3001/health
   quick-match/create-room с того же соединения освобождает старую комнату
   (в начавшейся партии это техпоражение ушедшего).
 - **HTTP**: `/health` и `/metrics` лимитируются по IP — `HTTP_RATE_LIMIT`
-  запросов в минуту, дальше 429.
+  запросов в минуту, дальше 429. Если задан `METRICS_TOKEN`, `/metrics`
+  дополнительно требует заголовок `x-metrics-token`.
 - **Живучесть**: ошибки соединений и сервера логируются и считаются в
   `balda_ws_errors_total`, процесс не падает; `uncaughtException` /
   `unhandledRejection` логируются со счётчиками `balda_uncaught_errors_total` /
