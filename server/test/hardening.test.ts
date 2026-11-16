@@ -103,14 +103,12 @@ describe('Эло: коэффициент K по опыту и уровню', () 
     expect(newB).toBe(984);
   });
 
-  it('новичок-победитель растёт быстрее ветерана с тем же результатом', () => {
-    const [, rookieOpponent] = calcElo(1500, 1000, 1, 32, 40);
-    const [, veteranOpponent] = calcElo(1500, 2000, 1, 32, 18);
-    const rookieGain = rookieOpponent - 1000;
-    const veteranLoss = 2000 - veteranOpponent;
-    expect(rookieGain).toBeGreaterThan(0);
-    expect(veteranLoss).toBeGreaterThan(0);
-    // Ожидаемый результат одинаковый (разница рейтингов 500), но K разный.
-    expect(rookieGain).toBeGreaterThan(veteranLoss * (40 / 18) - 2);
+  it('победитель-новичок растёт быстрее победителя-ветерана', () => {
+    // Одинаковые рейтинги, одинаковый результат — разница только в K.
+    const [rookie] = calcElo(1500, 1500, 1, 40, 40);
+    const [veteran] = calcElo(1500, 1500, 1, 18, 18);
+    expect(rookie - 1500).toBe(20);
+    expect(veteran - 1500).toBe(9);
+    expect(rookie - 1500).toBeGreaterThan(veteran - 1500);
   });
 });

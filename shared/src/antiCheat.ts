@@ -152,7 +152,10 @@ export class AntiCheatSystem {
 
     result.suspicion = Math.min(1, Math.max(0, result.suspicion));
 
-    // Устойчивый паттерн: несколько подозрительных ходов в окне.
+    // Устойчивый паттерн: несколько подозрительных ходов в окне
+    // (текущий ход тоже учитывается).
+    profile.recentSuspicious.push(result.suspicion >= 0.5);
+    if (profile.recentSuspicious.length > WINDOW_SIZE) profile.recentSuspicious.shift();
     const suspiciousInWindow = profile.recentSuspicious.filter(Boolean).length;
     if (
       result.suspicion >= this.config.suspicionThreshold ||
@@ -167,8 +170,6 @@ export class AntiCheatSystem {
       result.action = 'WARN';
     }
 
-    profile.recentSuspicious.push(result.suspicion >= 0.5);
-    if (profile.recentSuspicious.length > WINDOW_SIZE) profile.recentSuspicious.shift();
     this.moveCounter += 1;
     return result;
   }
