@@ -231,7 +231,7 @@ export interface AnalyticsProvider {
  * In-memory analytics provider
  */
 export class InMemoryAnalyticsProvider implements AnalyticsProvider {
-  private readonly config: AnalyticsConfig;
+  private config: AnalyticsConfig;
   private events: AnalyticsEvent[] = [];
   private sessions: Map<string, SessionMetrics> = new Map();
   private playerMetrics: Map<number, PlayerMetrics> = new Map();

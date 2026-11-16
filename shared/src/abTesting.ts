@@ -244,7 +244,7 @@ export const DEFAULT_EXPERIMENTS: Experiment[] = [
  * A/B Testing system
  */
 export class ABTestingSystem {
-  private readonly config: ABTestingConfig;
+  private config: ABTestingConfig;
   private experiments: Map<string, Experiment> = new Map();
   private assignments: Map<number, Map<string, ExperimentAssignment>> = new Map();
 
@@ -608,7 +608,7 @@ export class ABTestingSystem {
     });
 
     if (data.config) {
-      this.config = { ...this.config, ...data.config };
+      this.config = { ...this.config, ...data.config } as ABTestingConfig;
     }
   }
 }

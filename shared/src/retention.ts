@@ -141,7 +141,7 @@ export const DEFAULT_RETENTION_CONFIG: RetentionConfig = {
  * Retention system
  */
 export class RetentionSystem {
-  private readonly config: RetentionConfig;
+  private config: RetentionConfig;
   private sessions: Map<string, PlayerSession> = new Map();
   private playerRetention: Map<number, PlayerRetention> = new Map();
   private cohorts: Map<string, CohortRetention> = new Map();
@@ -633,7 +633,7 @@ export const addSession = (session: Omit<PlayerSession, 'date' | 'duration'>): P
   return getRetention().addSession(session);
 };
 
-export const endSession = (sessionId: string, endTime: number): PlayerSession | null => {
+export const endRetentionSession = (sessionId: string, endTime: number): PlayerSession | null => {
   return getRetention().endSession(sessionId, endTime);
 };
 
