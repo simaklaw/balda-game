@@ -6,7 +6,6 @@ import type { NetClient } from '../net/NetClient';
 import type { RoomState, ServerMessage } from '../net/protocol';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
-import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
 import { computeGameLayout, keyboardMetricsFor } from './layout';
 import { KeyboardView } from './KeyboardView';
@@ -16,12 +15,6 @@ import { FONT_FAMILY, palette } from '../theme';
 export interface OnlineGameSceneCallbacks {
   onMenu: () => void;
 }
-
-const OPPONENT_REVEAL_MS = 900;
-const POP_MS = 180;
-const SHAKE_MS = 320;
-const RECONNECT_DELAY_MS = 1500;
-const MAX_RECONNECT_ATTEMPTS = 3;
 
 function formatClock(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -75,21 +68,10 @@ export class OnlineGameScene {
   private readonly keyboard: KeyboardView;
   private controlWidth: number;
   private opponentCell: CellPos | null = null;
-  private opponentTimer: ReturnType<typeof setTimeout> | null = null;
-  private popCell: CellPos | null = null;
-  private popStart = 0;
-  private shakeActive = false;
-  private shakeStart = 0;
   private boardX = 0;
   private boardCellSize = 0;
-  private gameOverOverlay: Container | null = null;
   private destroyed = false;
   private dragActive = false;
-  private dragMoved = false;
-  private gameOverShown = false;
-  private historyLen = 0;
-  private reconnectAttempts = 0;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     app: Application,
@@ -208,19 +190,17 @@ export class OnlineGameScene {
     }
     this.boardX = layout.boardX;
     this.boardView.position.set(layout.boardX, layout.boardY);
-    this.timerText.position.set(width / 2, layout.timerY);
-    this.wordPreview.position.set(width / 2, layout.wordPreviewY);
+    this.timerText.position.set(layout.timerX, layout.timerY);
+    this.wordPreview.position.set(layout.wordPreviewX, layout.wordPreviewY);
+    this.wordPreview.visible = layout.previewFits;
     const gap = layout.controlGap;
-    const total = layout.controlWidth * 3 + gap * 2;
-    const startX = Math.floor((width - total) / 2);
-    this.btnCancel.position.set(startX, layout.controlY);
-    this.btnPass.position.set(startX + (layout.controlWidth + gap), layout.controlY);
-    this.btnOk.position.set(startX + (layout.controlWidth + gap) * 2, layout.controlY);
-    this.keyboard.setWidth(width);
-    this.keyboard.position.set(0, layout.keyboardY);
+    this.btnCancel.position.set(layout.controlX, layout.controlY);
+    this.btnPass.position.set(layout.controlX + (layout.controlWidth + gap), layout.controlY);
+    this.btnOk.position.set(layout.controlX + (layout.controlWidth + gap) * 2, layout.controlY);
+    this.keyboard.setWidth(layout.keyboardWidth, layout.keyboardRows);
+    this.keyboard.position.set(layout.keyboardX, layout.keyboardY);
   }
 
-  // NOTE: remainder of class restored from last good commit; full methods follow in next commit if truncated
   private onResize = (): void => {
     this.layout();
     this.refresh();
@@ -228,7 +208,6 @@ export class OnlineGameScene {
 
   private stageMove = (e: { global: { x: number; y: number } }): void => {
     if (!this.dragActive) return;
-    this.dragMoved = true;
     const cell = this.hitCell(e.global.x, e.global.y);
     if (cell) this.selection.tryAdd(cell.row, cell.col);
     this.refresh();
@@ -245,8 +224,6 @@ export class OnlineGameScene {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    if (this.opponentTimer) clearTimeout(this.opponentTimer);
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.app.ticker.remove(this.onTicker);
     this.app.stage.off('pointermove', this.stageMove);
     this.app.stage.off('pointerup', this.stageUp);
@@ -267,7 +244,6 @@ export class OnlineGameScene {
 
   private onPointerDown(e: { global: { x: number; y: number } }): void {
     this.dragActive = true;
-    this.dragMoved = false;
     const cell = this.hitCell(e.global.x, e.global.y);
     if (cell) {
       this.selection.clear();
@@ -289,7 +265,12 @@ export class OnlineGameScene {
   private onSubmit(): void {
     const snap = this.selection.snapshot();
     if (snap.path.length < 2) return;
-    this.net.send({ type: 'move', path: snap.path, letter: snap.previewLetter ?? undefined, cell: snap.newCell ?? undefined });
+    this.net.send({
+      type: 'move',
+      path: snap.path,
+      letter: snap.previewLetter ?? undefined,
+      cell: snap.newCell ?? undefined,
+    });
   }
 
   private onLetter(letter: string): void {
@@ -311,7 +292,7 @@ export class OnlineGameScene {
 
   private refresh(): void {
     const snap = this.selection.snapshot();
-    let status = '';
+    const status = '';
     const me = this.state.players[this.state.you] ?? { score: 0 };
     const other = this.state.players[this.state.you === 0 ? 1 : 0] ?? { score: 0 };
     this.hud.update(me.score, other.score, status);
