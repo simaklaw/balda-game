@@ -25,7 +25,7 @@ describe('createRateLimiter', () => {
   });
 
   it('ключи независимы: чужой IP не страдает от чужого лимита', () => {
-    let t = 1000;
+    const t = 1000;
     const limiter = createRateLimiter({ limit: 1, windowMs: 60_000, now: () => t });
     expect(limiter.allow('ip1')).toBe(true);
     expect(limiter.allow('ip1')).toBe(false);
