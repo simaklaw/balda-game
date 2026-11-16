@@ -39,10 +39,14 @@ const { dawg, size: dictSize, source: dictSource } = loadDictionary(DICT_PATH);
 const playerStore = new PlayerStore(PLAYERS_PATH);
 playerStore.load();
 
-const matchmaker = new Matchmaker(dawg, { players: playerStore });
-
 // Метрики: /metrics отдаёт счётчики и датчики в формате Prometheus.
 const metrics = new Metrics();
+
+const matchmaker = new Matchmaker(dawg, {
+  players: playerStore,
+  onStarted: () => metrics.inc('balda_games_started_total'),
+  onFinished: () => metrics.inc('balda_games_finished_total'),
+});
 
 interface Session {
   roomId: string;

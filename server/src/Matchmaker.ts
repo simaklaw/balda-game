@@ -17,6 +17,10 @@ export interface MatchmakerOptions {
   reconnectMs?: number;
   /** Постоянное хранилище профилей; без него рейтинг живёт в памяти. */
   players?: PlayerStore;
+  /** Партия началась (комната заполнилась) — для метрик. */
+  onStarted?: (room: Room) => void;
+  /** Партия завершилась (после внутренних дел: рейтинги, TTL) — для метрик. */
+  onFinished?: (room: Room) => void;
 }
 
 export interface JoinResult {
@@ -106,6 +110,7 @@ export class Matchmaker {
       config: this.options.config,
       turnMs: this.options.turnMs,
       reconnectMs: this.options.reconnectMs,
+      onStarted: this.options.onStarted,
       onFinished: (room) => {
         this.applyRatings(room);
         if (this.waiting?.id === room.id) this.waiting = null;
@@ -113,6 +118,7 @@ export class Matchmaker {
           room.dispose();
           this.rooms.delete(room.id);
         }, FINISHED_ROOM_TTL_MS);
+        this.options.onFinished?.(room);
       },
       onEmpty: (room) => {
         room.dispose();
@@ -148,7 +154,7 @@ export class Matchmaker {
   private newId(): string {
     let out = '';
     for (let i = 0; i < ID_LENGTH; i++) {
-      out += ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)];
+      out += ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)]!;
     }
     return out;
   }

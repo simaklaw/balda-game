@@ -81,6 +81,8 @@ export interface RoomOptions {
   onFinished?: (room: Room) => void;
   /** Комната опустела (все отключились до старта). */
   onEmpty?: (room: Room) => void;
+  /** Партия началась (комната заполнилась вторым игроком). */
+  onStarted?: (room: Room) => void;
   /** Стартовое слово (тесты); иначе — случайное из пула START_WORDS. */
   startWord?: string;
 }
@@ -109,6 +111,7 @@ export class Room {
   private reconnectMs: number;
   private onFinished?: (room: Room) => void;
   private onEmpty?: (room: Room) => void;
+  private onStarted?: (room: Room) => void;
   private turnTimer: ReturnType<typeof setTimeout> | null = null;
   private turnDeadline: number | null = null;
   private outcome: RoomOutcome | null = null;
@@ -119,6 +122,7 @@ export class Room {
     this.reconnectMs = options.reconnectMs ?? RECONNECT_MS;
     this.onFinished = options.onFinished;
     this.onEmpty = options.onEmpty;
+    this.onStarted = options.onStarted;
     const config = options.config ?? DEFAULT_CONFIG;
     const initialWord = options.startWord ?? pickStartWord(config.boardSize);
     this.game = new Game(options.dawg, config, initialWord);
@@ -173,8 +177,12 @@ export class Room {
       conn,
       reconnectTimer: null,
     };
+    const wasFull = this.isFull;
     this.slots[index] = slot;
-    if (this.isFull) this.armTurnTimer();
+    if (this.isFull) {
+      if (!wasFull) this.onStarted?.(this);
+      this.armTurnTimer();
+    }
     this.broadcastState();
     return { playerId: slot.id, token: slot.token, index };
   }

@@ -102,6 +102,25 @@ describe('Room', () => {
     solo.dispose();
   });
 
+  it('onStarted срабатывает один раз, когда комната заполнилась', () => {
+    const started: Room[] = [];
+    const r = new Room({
+      id: 'START1',
+      dawg: Dawg.fromWords(WORDS),
+      config: CONFIG,
+      turnMs: 0,
+      reconnectMs: 0,
+      startWord: 'бал',
+      onStarted: (room) => started.push(room),
+    });
+    r.addPlayer(new FakeConn(), 'А');
+    expect(started).toHaveLength(0);
+    r.addPlayer(new FakeConn(), 'Б');
+    expect(started).toHaveLength(1);
+    expect(started[0]).toBe(r);
+    r.dispose();
+  });
+
   it('валидный ход принимается, счёт и очередь меняются', () => {
     room.move(s0.playerId, MOVE_AK);
     const state = p0.lastState();
@@ -241,6 +260,27 @@ describe('Matchmaker', () => {
     mm.dispose();
     store.dispose();
   });
+
+  it('колбэки onStarted/onFinished срабатывают для метрик', () => {
+    let started = 0;
+    let finished = 0;
+    const mm = new Matchmaker(dawg, {
+      turnMs: 0,
+      reconnectMs: 0,
+      onStarted: () => {
+        started += 1;
+      },
+      onFinished: () => {
+        finished += 1;
+      },
+    });
+    const host = mm.createRoom(new FakeConn(), 'А');
+    expect(started).toBe(0);
+    const guest = mm.joinRoom(host.room.id, new FakeConn(), 'Б');
+    expect(started).toBe(1);
+    expect(finished).toBe(0);
+    host.room.leave(guest!.playerId);
+    expect(finished).toBe(1);
+    mm.dispose();
+  });
 });
-
-

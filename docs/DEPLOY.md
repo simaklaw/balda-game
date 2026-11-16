@@ -16,14 +16,24 @@ curl http://localhost:3001/health
   каталог `./data` смонтирован как том — данные переживают пересоздание
   контейнера.
 - Состояние: `GET /health` → `{ ok, words, dictSource, rooms, players }`.
+- Метрики: `GET /metrics` — текст Prometheus (счётчики `balda_*`: соединения,
+  сообщения, ходы, партии, ошибки; датчики: сокеты/комнаты/игроки).
 
 ## Переменные окружения
 
-| Переменная      | По умолчанию                        | Назначение                      |
-| --------------- | ----------------------------------- | ------------------------------- |
-| `PORT`          | `3001`                              | HTTP + WebSocket на одном порту |
-| `DICT_PATH`     | `client/public/dict/words.txt`      | Список слов (по одному в строке)|
-| `PLAYERS_PATH`  | `data/players.json`                 | Файл профилей (JSON)            |
+| Переменная              | По умолчанию                        | Назначение                            |
+| ----------------------- | ----------------------------------- | ------------------------------------- |
+| `PORT`                  | `3001`                              | HTTP + WebSocket на одном порту       |
+| `DICT_PATH`             | `client/public/dict/words.txt`      | Список слов (по одному в строке)      |
+| `PLAYERS_PATH`          | `data/players.json`                 | Файл профилей (JSON)                  |
+| `ALLOWED_ORIGINS`       | пусто (только same-origin)          | Разрешённые Origin для WS, через запятую |
+| `MAX_SOCKETS_PER_IP`    | `8`                                 | Лимит одновременных WS-соединений с одного IP |
+| `MAX_MESSAGES_PER_WINDOW` | `60`                              | Лимит сообщений за окно 10 с (флуд → закрытие) |
+
+За обратным прокси укажите в `ALLOWED_ORIGINS` адреса площадок
+(например, `https://yandex.ru/games,https://games.s3.yandex.net`) — иначе
+браузерные клиенты с чужим Origin получат 403. Не-браузерные клиенты
+(без Origin) не ограничиваются.
 
 ## WSS: HTTPS и защищённый WebSocket
 
@@ -75,5 +85,7 @@ Graceful shutdown: контейнер получает SIGTERM, сервер с�
 
 ## CI
 
-В `.github/workflows/ci.yml` есть джоба `docker` — на каждый пуш проверяется
-`docker build`, так как сломанный Dockerfile ловится до деплоя.
+В `.github/workflows/ci.yml` три джобы на каждый пуш: `build-test`
+(lint + typecheck + тесты + сборка), `smoke` (сервер играет настоящую партию
+двумя WS-клиентами, включая проверку `/metrics`) и `docker` (`docker build`,
+так как сломанный Dockerfile ловится до деплоя).
