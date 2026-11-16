@@ -27,6 +27,8 @@ if (wordsBytes > 1024 * 1024) {
 const jsFiles = [...html.matchAll(/src="([^"]+\.js)"/g)].map((m) => 'client/dist/' + m[1]);
 let jsTotal = 0;
 for (const file of jsFiles) {
+  // Внешние скрипты (CDN площадок, например telegram-web-app.js) не считаем.
+  if (!existsSync(file)) continue;
   jsTotal += statSync(file).size;
 }
 // В фазе B — предупреждение; жёсткий падающий бюджет вводится в фазе F.
