@@ -26,6 +26,8 @@ export interface MatchmakerOptions {
   onStarted?: (room: Room) => void;
   /** Партия завершилась (после внутренних дел: рейтинги, TTL) — для метрик. */
   onFinished?: (room: Room) => void;
+  /** Ход отклонён — для метрик качества словаря/правил. */
+  onMoveRejected?: RoomOptions['onMoveRejected'];
 }
 
 export interface JoinResult {
@@ -131,6 +133,7 @@ export class Matchmaker {
       turnMs: this.options.turnMs,
       reconnectMs: this.options.reconnectMs,
       onStarted: this.options.onStarted,
+      onMoveRejected: this.options.onMoveRejected,
       onFinished: (room) => {
         this.applyRatings(room);
         if (this.waiting?.id === room.id) this.waiting = null;
