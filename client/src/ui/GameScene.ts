@@ -10,9 +10,9 @@ import { BoardView } from './BoardView';
 import { Button } from './Button';
 import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
+import { computeGameLayout, keyboardMetricsFor } from './layout';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
-import type { SafeInsets } from './safeArea';
 import { FONT_FAMILY, palette } from '../theme';
 import { shouldReduceMotion } from '../perf';
 
@@ -93,6 +93,8 @@ export class GameScene {
   private gameOverShown = false;
   private historyOpen = false;
   private boardX = 0;
+  private boardCellSize = 0;
+  private gameOverOverlay: Container | null = null;
   private popCell: CellPos | null = null;
   private popStart = 0;
   private shakeActive = false;
@@ -121,8 +123,16 @@ export class GameScene {
     this.hud = new HudView(app.screen.width);
     this.view.addChild(this.hud);
 
-    const cellSize = this.computeCellSize(app.screen.width, app.screen.height, options.boardSize, insets);
-    this.boardView = new BoardView(options.boardSize, cellSize);
+    const initialLayout = computeGameLayout({
+      width: app.screen.width,
+      height: app.screen.height,
+      boardSize: options.boardSize,
+      insets,
+      keyboardHeight: keyboardMetricsFor(app.screen.width).height,
+      controlCount: 4,
+    });
+    this.boardCellSize = initialLayout.cellSize;
+    this.boardView = new BoardView(options.boardSize, initialLayout.cellSize);
     this.view.addChild(this.boardView);
 
     this.timerText = new Text({
@@ -140,7 +150,7 @@ export class GameScene {
     this.wordPreview.anchor.set(0.5, 0);
     this.view.addChild(this.wordPreview);
 
-    this.controlWidth = this.computeControlWidth(app.screen.width, insets);
+    this.controlWidth = initialLayout.controlWidth;
     const controlHeight = 46;
     this.btnCancel = new Button({
       caption: 'Отмена',
@@ -193,50 +203,51 @@ export class GameScene {
     this.refresh();
   }
 
-  private computeCellSize(width: number, height: number, boardSize: number, insets: SafeInsets): number {
-    // Резервы: сверху HUD и часы, снизу клавиатура и панель управления.
-    const reservedTop = 84 + insets.top;
-    const reservedBottom = 216 + insets.bottom;
-    const cell = Math.min(
-      Math.floor((width - 20 - insets.left - insets.right) / boardSize),
-      Math.floor((height - reservedTop - reservedBottom) / boardSize),
-    );
-    return Math.max(34, Math.min(110, cell));
-  }
-
-  private computeControlWidth(width: number, insets: SafeInsets): number {
-    const availW = width - 32 - insets.left - insets.right;
-    return Math.min(118, Math.max(64, Math.floor((availW - 24) / 4)));
-  }
-
   private layout(): void {
     const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
     this.inputLayer.clear();
     this.inputLayer.rect(0, 0, width, height).fill({ color: 0xffffff, alpha: 0 });
+    const layout = computeGameLayout({
+      width,
+      height,
+      boardSize: this.options.boardSize,
+      insets,
+      keyboardHeight: keyboardMetricsFor(width).height,
+      controlCount: 4,
+    });
     this.hud.layout(width);
-    this.hud.position.set(0, insets.top);
-    this.controlWidth = this.computeControlWidth(width, insets);
-    this.btnCancel.setWidth(this.controlWidth);
-    this.btnPass.setWidth(this.controlWidth);
-    this.btnHistory.setWidth(this.controlWidth);
-    this.btnOk.setWidth(this.controlWidth);
-    const boardPx = this.boardView.boardPixelSize;
-    const boardY = 84 + insets.top;
-    this.boardX = Math.max(insets.left, Math.floor((width - boardPx) / 2));
-    this.boardView.position.set(this.boardX, boardY);
-    this.timerText.position.set(width / 2, 60 + insets.top);
-    this.wordPreview.position.set(width / 2, boardY + boardPx + 8);
-    const gap = 8;
-    const total = this.controlWidth * 4 + gap * 3;
-    const controlY = height - 58 - insets.bottom;
+    this.hud.position.set(0, layout.hudY);
+    this.controlWidth = layout.controlWidth;
+    this.btnCancel.setWidth(layout.controlWidth);
+    this.btnPass.setWidth(layout.controlWidth);
+    this.btnHistory.setWidth(layout.controlWidth);
+    this.btnOk.setWidth(layout.controlWidth);
+    if (layout.cellSize !== this.boardCellSize) {
+      this.boardCellSize = layout.cellSize;
+      this.boardView.setCellSize(layout.cellSize);
+    }
+    this.boardX = layout.boardX;
+    this.boardView.position.set(layout.boardX, layout.boardY);
+    this.timerText.position.set(width / 2, layout.timerY);
+    this.wordPreview.position.set(width / 2, layout.wordPreviewY);
+    const gap = layout.controlGap;
+    const total = layout.controlWidth * 4 + gap * 3;
     const startX = Math.floor((width - total) / 2);
-    this.btnCancel.position.set(startX, controlY);
-    this.btnPass.position.set(startX + (this.controlWidth + gap), controlY);
-    this.btnHistory.position.set(startX + (this.controlWidth + gap) * 2, controlY);
-    this.btnOk.position.set(startX + (this.controlWidth + gap) * 3, controlY);
-    this.keyboard.position.set(0, height - 64 - insets.bottom - this.keyboard.keyboardHeight);
+    this.btnCancel.position.set(startX, layout.controlY);
+    this.btnPass.position.set(startX + (layout.controlWidth + gap), layout.controlY);
+    this.btnHistory.position.set(startX + (layout.controlWidth + gap) * 2, layout.controlY);
+    this.btnOk.position.set(startX + (layout.controlWidth + gap) * 3, layout.controlY);
+    this.keyboard.setWidth(width);
+    this.keyboard.position.set(0, layout.keyboardY);
+    // Оверлей конца партии перестраивается под новые размеры экрана.
+    if (this.gameOverOverlay !== null) {
+      this.view.removeChild(this.gameOverOverlay);
+      this.gameOverOverlay.destroy({ children: true });
+      this.gameOverOverlay = null;
+      this.buildGameOverOverlay();
+    }
   }
 
   private onPointerDown(e: FederatedPointerEvent): void {
@@ -277,6 +288,7 @@ export class GameScene {
 
   private readonly onResize = (): void => {
     this.layout();
+    if (!this.destroyed && !this.gameOverShown) this.refresh();
   };
 
   /**
@@ -699,6 +711,11 @@ export class GameScene {
     this.timer.stop();
     // Результат фиксируется один раз, до показа оверлея (для локального рейтинга).
     this.callbacks.onGameOver?.(this.controller.game.players[0]!.score);
+    this.buildGameOverOverlay();
+  }
+
+  /** Оверлей конца партии; вызывается также из layout() при повороте экрана. */
+  private buildGameOverOverlay(): void {
     const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
@@ -768,6 +785,7 @@ export class GameScene {
     });
     btnMenu.position.set(panelX + 15, panelY + 212);
     overlay.addChild(btnMenu);
+    this.gameOverOverlay = overlay;
     this.view.addChild(overlay);
   }
 
@@ -791,3 +809,4 @@ export class GameScene {
     this.view.destroy({ children: true });
   }
 }
+

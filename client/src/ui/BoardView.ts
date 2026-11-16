@@ -30,27 +30,48 @@ const ORTHO_DIRS: ReadonlyArray<readonly [number, number]> = [
   [0, 1],
 ];
 
-/** Drawing board: grid, letters and highlights for cells. */
+/**
+ * Drawing board: grid, letters and highlights for cells.
+ * Перестраивается под новый размер клетки (поворот экрана) через setCellSize;
+ * после перестроения сцена вызывает sync() для перерисовки букв.
+ */
 export class BoardView extends Container {
   private readonly boardSize: number;
-  private readonly cellSize: number;
-  private readonly overlay: Graphics;
-  private readonly letterViews: Text[][] = [];
-  private readonly cellGraphics: Graphics[][] = [];
-  private lastBoardState: Map<string, string> = new Map();
+  private cellSize: number;
+  private overlay: Graphics;
+  private letterViews: Text[][] = [];
+  private cellGraphics: Graphics[][] = [];
 
   constructor(boardSize: number, cellSize: number) {
     super();
     this.boardSize = boardSize;
     this.cellSize = cellSize;
+    this.overlay = new Graphics();
+    this.build();
+  }
+
+  get boardPixelSize(): number {
+    return this.totalSize();
+  }
+
+  /** Перестроить поле под новый размер клетки (поворот/resize экрана). */
+  setCellSize(cellSize: number): void {
+    if (cellSize === this.cellSize) return;
+    this.cellSize = cellSize;
+    this.build();
+  }
+
+  private build(): void {
+    for (const child of [...this.children]) child.destroy({ children: true });
+    this.removeChildren();
 
     const grid = new Graphics();
     grid
       .roundRect(0, 0, this.totalSize(), this.totalSize(), 14)
       .fill({ color: palette().panel })
       .stroke({ width: 2, color: palette().panelBorder });
-    for (let row = 0; row < boardSize; row++) {
-      for (let col = 0; col < boardSize; col++) {
+    for (let row = 0; row < this.boardSize; row++) {
+      for (let col = 0; col < this.boardSize; col++) {
         const { x, y } = this.cellOrigin(row, col);
         grid
           .roundRect(x, y, this.cellSize - 6, this.cellSize - 6, 8)
@@ -58,15 +79,15 @@ export class BoardView extends Container {
           .stroke({ width: 1, color: palette().panelBorder, alpha: 0.7 });
       }
     }
-    this.addChild(grid);
-
     this.overlay = new Graphics();
-    this.addChild(this.overlay);
+    this.addChild(grid, this.overlay);
 
-    for (let row = 0; row < boardSize; row++) {
+    this.letterViews = [];
+    this.cellGraphics = [];
+    for (let row = 0; row < this.boardSize; row++) {
       const rowViews: Text[] = [];
       const rowGraphics: Graphics[] = [];
-      for (let col = 0; col < boardSize; col++) {
+      for (let col = 0; col < this.boardSize; col++) {
         const letterView = new Text({
           text: '',
           style: {
@@ -90,10 +111,6 @@ export class BoardView extends Container {
       this.letterViews.push(rowViews);
       this.cellGraphics.push(rowGraphics);
     }
-  }
-
-  get boardPixelSize(): number {
-    return this.totalSize();
   }
 
   private totalSize(): number {
@@ -122,9 +139,10 @@ export class BoardView extends Container {
   sync(get: (row: number, col: number) => string, highlight: BoardHighlight = NO_HIGHLIGHT): void {
     const reduceMotion = shouldReduceMotion();
     const size = this.cellSize - 6;
+    const overlay = this.overlay;
 
     if (!reduceMotion) {
-      this.overlay.clear();
+      overlay.clear();
     }
 
     const inPath = (row: number, col: number): boolean =>
@@ -146,12 +164,12 @@ export class BoardView extends Container {
 
         if (!reduceMotion) {
           if (isNew) {
-            this.overlay
+            overlay
               .roundRect(x, y, size, size, 8)
               .fill({ color: palette().cell, alpha: 0.9 })
               .stroke({ width: 3, color: palette().cellNew });
           } else if (inPath(row, col)) {
-            this.overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cellPath, alpha: 0.28 });
+            overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cellPath, alpha: 0.28 });
           }
           if (
             highlight.aiCell !== null &&
@@ -159,9 +177,9 @@ export class BoardView extends Container {
             highlight.aiCell.col === col &&
             !isNew
           ) {
-            this.overlay.roundRect(x, y, size, size, 8).stroke({ width: 3, color: palette().ai });
+            overlay.roundRect(x, y, size, size, 8).stroke({ width: 3, color: palette().ai });
           } else if (inAiPath(row, col) && !isNew) {
-            this.overlay
+            overlay
               .roundRect(x, y, size, size, 8)
               .stroke({ width: 2, color: palette().ai, alpha: 0.6 });
           }
@@ -171,14 +189,14 @@ export class BoardView extends Container {
             !isNew &&
             this.hasLetteredNeighbor(get, row, col)
           ) {
-            this.overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cell, alpha: 0.4 });
+            overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cell, alpha: 0.4 });
             const cx = x + size / 2;
             const cy = y + size / 2;
             const arm = Math.max(7, Math.floor(size * 0.16));
-            this.overlay
+            overlay
               .rect(cx - arm, cy - 2, arm * 2, 4)
               .fill({ color: palette().textDim, alpha: 0.55 });
-            this.overlay
+            overlay
               .rect(cx - 2, cy - arm, 4, arm * 2)
               .fill({ color: palette().textDim, alpha: 0.55 });
           }
