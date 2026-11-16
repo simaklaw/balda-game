@@ -22,12 +22,46 @@ describe('resolveWsUrl', () => {
   });
 });
 
+/** Минимально валидный RoomState для строгого parseServerMessage. */
+function minimalState(overrides: Record<string, unknown> = {}) {
+  return {
+    roomId: 'ABCDE',
+    size: 3,
+    board: [
+      ['', '', ''],
+      ['б', 'а', 'л'],
+      ['', '', ''],
+    ],
+    players: [
+      { name: 'A', score: 0, connected: true },
+      { name: 'B', score: 0, connected: true },
+    ],
+    currentPlayer: 0,
+    status: 'playing',
+    history: [],
+    winner: null,
+    endReason: null,
+    turnDeadline: null,
+    you: 0,
+    ...overrides,
+  };
+}
+
 describe('parseServerMessage', () => {
   it('разбирает state', () => {
-    const raw = JSON.stringify({ type: 'state', state: { roomId: 'ABCDE', you: 0 } });
+    const raw = JSON.stringify({ type: 'state', state: minimalState() });
     const msg = parseServerMessage(raw);
     expect(msg).not.toBeNull();
     expect(msg!.type).toBe('state');
+    if (msg!.type === 'state') {
+      expect(msg.state.roomId).toBe('ABCDE');
+      expect(msg.state.size).toBe(3);
+    }
+  });
+
+  it('отбрасывает state без board/players', () => {
+    const raw = JSON.stringify({ type: 'state', state: { roomId: 'ABCDE', you: 0 } });
+    expect(parseServerMessage(raw)).toBeNull();
   });
 
   it('отбрасывает мусор', () => {
