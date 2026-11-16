@@ -1,11 +1,11 @@
-import { Application, Container, Text } from 'pixi.js';
+import { Application, Container } from 'pixi.js';
 import { loadDawg } from './dict/dictionary';
 import { createAdapter, shouldShowInterstitial } from './platform';
 import type { LeaderboardRow } from './platform';
 import { addResult, parseLeaderboard, serializeLeaderboard, LEADERBOARD_KEY } from './game/leaderboard';
 import type { LeaderboardEntry } from './game/leaderboard';
 import { setTheme } from './theme';
-import { FONT_FAMILY, palette, themeKind } from './theme';
+import { palette, themeKind } from './theme';
 import { getPerformanceConfig, invalidateDeviceInfo } from './perf';
 import { GameScene } from './ui/GameScene';
 import type { GameSceneOptions } from './ui/GameScene';
@@ -20,6 +20,10 @@ interface Scene {
 
 /** Цвет фона страницы синхронизируется с темой, чтобы не было вспышек. */
 const cssBackground = (): string => '#' + palette().bg.toString(16).padStart(6, '0');
+
+/** Уступить кадр: браузер отрисовывает #boot до тяжёлой синхронной работы. */
+const nextFrame = (): Promise<void> =>
+  new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
 async function bootstrap(): Promise<void> {
   const adapter = await createAdapter();
@@ -49,16 +53,56 @@ async function bootstrap(): Promise<void> {
     invalidateDeviceInfo();
   });
 
-  const loading = new Text({
-    text: 'Загрузка словаря…',
-    style: { fontFamily: FONT_FAMILY, fontSize: 20, fill: palette().textDim },
-  });
-  loading.anchor.set(0.5);
-  loading.position.set(window.innerWidth / 2, window.innerHeight / 2);
-  app.stage.addChild(loading);
+  // Экран загрузки — DOM-оверлей #boot из index.html (не Pixi): он отрисовывается
+  // до синхронной сборки DAWG, тогда как Pixi-заглушка первый кадр не показывала.
+  const bootText = document.getElementById('boot-text');
 
-  const { dawg } = await loadDawg();
-  loading.destroy();
+  await nextFrame();
+  if (bootText !== null) bootText.textContent = 'Загрузка словаря…';
+
+  let loaded = await loadDawg();
+  let dawg = loaded.dawg;
+
+  // Деградация словаря должна быть видимой: баннер + кнопка повтора.
+  const removeDictBanner = (): void => {
+    document.getElementById('dict-banner')?.remove();
+  };
+  const retryDictLoad = async (): Promise<void> => {
+    const button = document.querySelector<HTMLButtonElement>('#dict-banner button');
+    if (button !== null) button.disabled = true;
+    const retry = await loadDawg();
+    if (retry.source === 'full') {
+      loaded = retry;
+      dawg = retry.dawg;
+      removeDictBanner();
+      showMenu();
+    } else {
+      const text = document.getElementById('dict-banner-text');
+      if (text !== null) text.textContent = 'Полный словарь недоступен. Проверьте сеть и повторите.';
+      if (button !== null) button.disabled = false;
+    }
+  };
+  const showDictBanner = (): void => {
+    removeDictBanner();
+    const banner = document.createElement('div');
+    banner.id = 'dict-banner';
+    const text = document.createElement('span');
+    text.id = 'dict-banner-text';
+    text.textContent =
+      'Ограниченный словарь (' + loaded.size + ' слов). Часть слов может не приниматься.';
+    const retryButton = document.createElement('button');
+    retryButton.textContent = 'Повторить загрузку';
+    retryButton.addEventListener('click', () => {
+      void retryDictLoad();
+    });
+    banner.appendChild(text);
+    banner.appendChild(retryButton);
+    document.body.appendChild(banner);
+  };
+  if (loaded.source === 'dev') showDictBanner();
+
+  const boot = document.getElementById('boot');
+  if (boot !== null) boot.remove();
 
   let scene: Scene | null = null;
   const setScene = (next: Scene): void => {
@@ -168,6 +212,11 @@ async function bootstrap(): Promise<void> {
           nativeTop = [];
         }
       }
+      // Видимость состояния словаря в подвале меню.
+      const dictInfo =
+        loaded.source === 'full'
+          ? 'Словарь: ' + loaded.size.toLocaleString('ru-RU') + ' слов'
+          : 'Словарь: ограниченный';
       setScene(
         new MenuScene(
           app,
@@ -189,6 +238,7 @@ async function bootstrap(): Promise<void> {
           },
           leaderboard,
           nativeTop,
+          dictInfo,
         ),
       );
     })();

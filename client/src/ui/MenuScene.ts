@@ -46,6 +46,9 @@ const RULES_TEXT =
   '4. Только нарицательные существительные в единственном числе: от 3 букв на поле 3×3, от 4 — на 5×5. Повторять слова нельзя.\n' +
   '5. Три пропуска подряд завершают партию. В блице и Фишере просрочка часов — поражение.';
 
+const HINT_TEXT =
+  '2 мин — на ход · Блиц — 2 мин на партию · Фишер — 1 мин + 10 с за ход';
+
 const ROW_WIDTH = 104;
 const TIME_ROW_WIDTH = 88;
 const ROW_GAP = 12;
@@ -71,6 +74,8 @@ export class MenuScene {
   private readonly btnPlay: Button;
   private readonly leaderboard: readonly LeaderboardEntry[];
   private readonly nativeTop: readonly LeaderboardRow[];
+  /** Строка о словаре в подвале меню («Словарь: 49 312 слов» / «Словарь: ограниченный»). */
+  private readonly dictInfo: string;
   private difficulty: Difficulty = 'medium';
   private boardSize: 3 | 5 = 5;
   private timeControl: TimeControlKind = 'classic';
@@ -80,11 +85,13 @@ export class MenuScene {
     callbacks: MenuSceneCallbacks,
     leaderboard: readonly LeaderboardEntry[] = [],
     nativeTop: readonly LeaderboardRow[] = [],
+    dictInfo = '',
   ) {
     this.app = app;
     this.callbacks = callbacks;
     this.leaderboard = leaderboard;
     this.nativeTop = nativeTop;
+    this.dictInfo = dictInfo;
     this.title = new Text({
       text: 'БАЛДА',
       style: { fontFamily: FONT_FAMILY, fontSize: 56, fill: palette().text },
@@ -111,7 +118,7 @@ export class MenuScene {
     });
     this.timeLabel.anchor.set(0.5, 0);
     this.hint = new Text({
-      text: '2 мин — на ход · Блиц — 2 мин на партию · Фишер — 1 мин + 10 с за ход',
+      text: this.dictInfo === '' ? HINT_TEXT : HINT_TEXT + '\n' + this.dictInfo,
       style: {
         fontFamily: FONT_FAMILY,
         fontSize: 13,
@@ -430,7 +437,8 @@ export class MenuScene {
     const labelH = labelFont + 3;
     const blockGap = ultra ? 10 : Math.round(18 * s) + 6;
     const titleBlock = ultra ? titleFont + 4 : titleFont + 6 + subFont + Math.round(16 * s) + 8;
-    const hintH = ultra ? 0 : 36;
+    // Строка о словаре добавляет вторую строку подсказки.
+    const hintH = ultra ? 0 : this.dictInfo === '' ? 36 : 52;
 
     this.title.style.fontSize = titleFont;
     this.subtitle.style.fontSize = subFont;

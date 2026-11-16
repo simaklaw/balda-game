@@ -21,8 +21,10 @@ function normalizeList(words: readonly string[]): string[] {
  */
 export async function loadDawg(): Promise<LoadedDawg> {
   try {
-    const base = import.meta.env.BASE_URL;
-    const url = base.endsWith('/') ? base + 'dict/words.txt' : base + '/dict/words.txt';
+    // Относительный URL от базового адреса документа: работает при base:'./',
+    // при вложенном хостинге площадок и в dev-режиме. document может отсутствовать
+    // в тестовой среде — ошибка ловится ниже и даёт откат на dev-набор.
+    const url = new URL('dict/words.txt', document.baseURI).href;
     const response = await fetch(url);
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const text = await response.text();
