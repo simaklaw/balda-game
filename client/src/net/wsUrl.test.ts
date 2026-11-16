@@ -52,8 +52,9 @@ describe('parseServerMessage', () => {
     const raw = JSON.stringify({ type: 'state', state: minimalState() });
     const msg = parseServerMessage(raw);
     expect(msg).not.toBeNull();
-    expect(msg!.type).toBe('state');
-    if (msg!.type === 'state') {
+    if (msg === null) return;
+    expect(msg.type).toBe('state');
+    if (msg.type === 'state') {
       expect(msg.state.roomId).toBe('ABCDE');
       expect(msg.state.size).toBe(3);
     }
