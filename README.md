@@ -35,3 +35,8 @@ docs/     — архитектура, деплой, публикация
 5. **Hardening** ✅: строгий протокол, защита WSS, smoke в CI, метрики Prometheus, нативные лидерборды Яндекса.
 
 Подробнее: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DEPLOY.md](docs/DEPLOY.md), [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Лицензия
+
+Код распространяется по [MIT License](LICENSE).
+Словарные данные и толкования — см. [docs/DICTIONARY.md](docs/DICTIONARY.md).
