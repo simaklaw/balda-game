@@ -41,12 +41,25 @@ jobs:
       - run: npm ci || npm install
       - name: Smoke — два WS-клиента играют против сервера
         run: |
-          npx tsx server/src/index.ts &
+          npx tsx server/src/index.ts > /tmp/server.log 2>&1 &
+          SRV=$!
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:3001/health >/dev/null && break
             sleep 1
           done
-          node scripts/smoke.mjs
+          set +e
+          node scripts/smoke.mjs > /tmp/smoke.log 2>&1
+          CODE=$?
+          cat /tmp/smoke.log
+          if [ $CODE -ne 0 ]; then
+            echo '::error::=== smoke провален ==='
+            tail -n 40 /tmp/smoke.log | cut -c1-300 | while IFS= read -r line; do echo "::error::$line"; done
+            echo '::error::=== лог сервера ==='
+            tail -n 40 /tmp/server.log | cut -c1-300 | while IFS= read -r line; do echo "::error::$line"; done
+            kill $SRV 2>/dev/null || true
+            exit 1
+          fi
+          kill $SRV 2>/dev/null || true
 
   docker:
     runs-on: ubuntu-latest
