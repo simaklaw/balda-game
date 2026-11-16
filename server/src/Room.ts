@@ -351,7 +351,7 @@ export class Room {
       slot.reconnectTimer = null;
     }
     this.slots[index] = null;
-    if (this.playerCount === inter) this.onEmpty?.(this);
+    if (this.playerCount === 0) this.onEmpty?.(this);
   }
 
   /** Пересчёт Эло и фишек по факту завершения партии. */
