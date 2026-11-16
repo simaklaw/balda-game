@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { GameConfig } from '@balda/shared';
 import { Dawg, findAiMove } from '@balda/shared';
 import { LocalGameController } from '../src/game/LocalGameController';
 
@@ -110,7 +111,12 @@ describe('LocalGameController', () => {
   });
 
   it('три пропуска подряд — техническое поражение', () => {
-    const ctrl = new LocalGameController(Dawg.fromWords(TEST_WORDS), CONFIG, 'балда', {
+    // minWordLength 3: при минимуме 4 в маленьком тестовом словаре после хода
+    // бота не остаётся доступных слов (клад/кладь/склад требуют двух новых
+    // букв), бот пасует — и партия заканчивается по no_moves раньше
+    // skip_limit. С минимумом 3 у бота есть ходы на каждой итерации.
+    const skipConfig: GameConfig = { ...CONFIG, minWordLength: 3 };
+    const ctrl = new LocalGameController(Dawg.fromWords(TEST_WORDS), skipConfig, 'балда', {
       difficulty: 'hard',
       rng: () => 0,
     });
