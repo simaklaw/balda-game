@@ -4,11 +4,7 @@
   "version": "0.1.0",
   "description": "Мультиплатформенная HTML5-игра «Балда» (Яндекс Игры, VK, OK, Telegram)",
   "type": "module",
-  "workspaces": [
-    "client",
-    "server",
-    "shared"
-  ],
+  "workspaces": ["client", "server", "shared"],
   "scripts": {
     "dev": "npm run dev --workspace client",
     "test": "vitest run",
