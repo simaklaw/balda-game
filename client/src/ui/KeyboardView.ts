@@ -1,9 +1,9 @@
 import { Container } from 'pixi.js';
 import { Button } from './Button';
-import { keyboardMetricsFor } from './layout';
+import { keyboardMetricsFor, PORTRAIT_ROWS } from './layout';
 import { palette } from '../theme';
 
-const ROWS: readonly string[] = ['йцукенгшщзхъ', 'фывапролджэ', 'ячсмитьбю'];
+const DEFAULT_ROWS: readonly string[] = PORTRAIT_ROWS;
 
 /**
  * Кастомная экранная клавиатура: 32 буквы (без «ё»), раскладка ЙЦУКЕН.
@@ -26,24 +26,30 @@ export class KeyboardView extends Container {
     return this.keyboardHeightValue;
   }
 
-  /** Перестроить клавиши под новую ширину (поворот/resize экрана). */
-  setWidth(width: number): void {
-    if (this.keys.length > 0 && Math.abs(width - this.builtWidth) < 0.5) return;
-    this.build(width);
+  /** Перестроить клавиши под новую ширину и набор рядов. */
+  setWidth(width: number, rows: readonly string[] = DEFAULT_ROWS): void {
+    if (
+      this.keys.length > 0 &&
+      Math.abs(width - this.builtWidth) < 0.5 &&
+      rows.join('') === this.builtRows
+    ) {
+      return;
+    }
+    this.build(width, rows);
   }
 
   private builtWidth = 0;
+  private builtRows = '';
 
-  private build(width: number): void {
+  private build(width: number, rows: readonly string[] = DEFAULT_ROWS): void {
     for (const key of this.keys) key.destroy({ children: true });
     this.removeChildren();
     this.keys = [];
-    const { keyWidth, keyHeight, height } = keyboardMetricsFor(width);
-    this.keyboardHeightValue = height;
+    const { keyWidth, keyHeight, gap } = keyboardMetricsFor(width, rows);
     this.builtWidth = width;
-    const gap = 5;
+    this.builtRows = rows.join('');
     let y = 0;
-    for (const row of ROWS) {
+    for (const row of rows) {
       const letters = row.split('');
       const rowWidth = letters.length * keyWidth + (letters.length - 1) * gap;
       let x = Math.floor((width - rowWidth) / 2);
@@ -63,5 +69,6 @@ export class KeyboardView extends Container {
       }
       y += keyHeight + gap;
     }
+    this.keyboardHeightValue = Math.max(0, y - gap);
   }
 }
