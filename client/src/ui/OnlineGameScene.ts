@@ -23,7 +23,6 @@ function formatClock(ms: number): string {
   return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 }
 
-/** Адаптер снимка RoomState под BoardReader для SelectionModel. */
 class StateBoard implements BoardReader {
   private state: RoomState;
 
@@ -48,7 +47,7 @@ class StateBoard implements BoardReader {
   }
 }
 
-/** Онлайн-партия: состояние приходит от сервера, клиент только вводит ход. */
+/** Онлайн-партия: состояние с сервера, клиент только вводит ход. */
 export class OnlineGameScene {
   readonly view = new Container();
   private readonly app: Application;
@@ -70,6 +69,7 @@ export class OnlineGameScene {
   private opponentCell: CellPos | null = null;
   private boardX = 0;
   private boardCellSize = 0;
+  private previewFits = true;
   private destroyed = false;
   private dragActive = false;
 
@@ -84,7 +84,11 @@ export class OnlineGameScene {
     this.callbacks = callbacks;
     this.state = initialState;
     this.board = new StateBoard(initialState);
-    this.selection = new SelectionModel(this.board, initialState.allowDiagonal);
+    this.selection = new SelectionModel(
+      this.board,
+      initialState.size === 3 ? 3 : 4,
+      false,
+    );
 
     this.inputLayer = new Graphics();
     this.inputLayer.eventMode = 'static';
@@ -101,12 +105,11 @@ export class OnlineGameScene {
       controlCount: 3,
     });
 
-    this.hud = new HudView();
-    this.hud.layout(app.screen.width);
-    this.view.addChild(this.hud.view);
+    this.hud = new HudView(app.screen.width, { human: 'Вы', opponent: 'Соперник' });
+    this.view.addChild(this.hud);
 
     this.boardView = new BoardView(initialState.size, initialLayout.cellSize);
-    this.view.addChild(this.boardView.view);
+    this.view.addChild(this.boardView);
 
     this.timerText = new Text({
       text: '',
@@ -191,6 +194,7 @@ export class OnlineGameScene {
     this.boardX = layout.boardX;
     this.boardView.position.set(layout.boardX, layout.boardY);
     this.timerText.position.set(layout.timerX, layout.timerY);
+    this.previewFits = layout.previewFits;
     this.wordPreview.position.set(layout.wordPreviewX, layout.wordPreviewY);
     this.wordPreview.visible = layout.previewFits;
     const gap = layout.controlGap;
@@ -207,9 +211,9 @@ export class OnlineGameScene {
   };
 
   private stageMove = (e: { global: { x: number; y: number } }): void => {
-    if (!this.dragActive) return;
+    if (!this.dragActive || this.selection.snapshot.phase !== 'building') return;
     const cell = this.hitCell(e.global.x, e.global.y);
-    if (cell) this.selection.tryAdd(cell.row, cell.col);
+    if (cell) this.selection.extendPath(cell.row, cell.col);
     this.refresh();
   };
 
@@ -245,15 +249,19 @@ export class OnlineGameScene {
   private onPointerDown(e: { global: { x: number; y: number } }): void {
     this.dragActive = true;
     const cell = this.hitCell(e.global.x, e.global.y);
-    if (cell) {
-      this.selection.clear();
-      this.selection.tryAdd(cell.row, cell.col);
-      this.refresh();
+    if (!cell) return;
+    const phase = this.selection.snapshot.phase;
+    if (phase === 'building') {
+      this.selection.extendPath(cell.row, cell.col);
+    } else {
+      this.selection.tapCell(cell.row, cell.col);
+      this.keyboard.visible = this.selection.snapshot.phase === 'choosingLetter';
     }
+    this.refresh();
   }
 
   private onCancel(): void {
-    this.selection.clear();
+    this.selection.reset();
     this.keyboard.visible = false;
     this.refresh();
   }
@@ -263,20 +271,19 @@ export class OnlineGameScene {
   }
 
   private onSubmit(): void {
-    const snap = this.selection.snapshot();
-    if (snap.path.length < 2) return;
-    this.net.send({
-      type: 'move',
-      path: snap.path,
-      letter: snap.previewLetter ?? undefined,
-      cell: snap.newCell ?? undefined,
-    });
+    const move = this.selection.toMove();
+    if (!move) return;
+    this.net.send({ type: 'move', ...move });
+    this.selection.reset();
+    this.keyboard.visible = false;
+    this.refresh();
   }
 
   private onLetter(letter: string): void {
-    this.selection.setPreviewLetter(letter);
-    this.keyboard.visible = false;
-    this.refresh();
+    if (this.selection.chooseLetter(letter)) {
+      this.keyboard.visible = false;
+      this.refresh();
+    }
   }
 
   private updateTimers(): void {
@@ -291,13 +298,16 @@ export class OnlineGameScene {
   }
 
   private refresh(): void {
-    const snap = this.selection.snapshot();
-    const status = '';
+    const snap = this.selection.snapshot;
+    let status = '';
     const me = this.state.players[this.state.you] ?? { score: 0 };
     const other = this.state.players[this.state.you === 0 ? 1 : 0] ?? { score: 0 };
-    this.hud.update(me.score, other.score, status);
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
-    this.wordPreview.text = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
+    const wordLabel = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
+    if (!this.previewFits && wordLabel !== '') status = wordLabel;
+    this.hud.update(me.score, other.score, status);
+    this.wordPreview.text = this.previewFits ? wordLabel : '';
+    this.wordPreview.visible = this.previewFits && wordLabel !== '';
     this.boardView.sync(
       (row, col) => this.board.get(row, col),
       {
@@ -309,6 +319,7 @@ export class OnlineGameScene {
         showPlaceable: false,
       },
     );
+    this.btnOk.setEnabled(this.selection.canSubmit());
     this.updateTimers();
   }
 
@@ -316,7 +327,8 @@ export class OnlineGameScene {
     if (msg.type === 'state') {
       this.state = msg.state;
       this.board.update(msg.state);
-      this.selection.clear();
+      this.selection.reset();
+      this.keyboard.visible = false;
       this.refresh();
     }
   }
