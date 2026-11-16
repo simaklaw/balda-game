@@ -47,12 +47,14 @@ playerStore.load();
 
 // Метрики: /metrics отдаёт счётчики и датчики в формате Prometheus.
 const metrics = new Metrics();
+metrics.gauge('balda_dict_words', () => dictSize);
 
 const matchmaker = new Matchmaker(dawg, {
   players: playerStore,
   maxRooms: MAX_ROOMS,
   onStarted: () => metrics.inc('balda_games_started_total'),
   onFinished: () => metrics.inc('balda_games_finished_total'),
+  onMoveRejected: (code) => metrics.inc('balda_move_rejected_total', { code }),
 });
 
 // Rate-limit HTTP: /health и /metrics дешёвые, но публичные — limiting по IP.
