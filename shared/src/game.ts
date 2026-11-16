@@ -1,6 +1,6 @@
 import { Board } from './board';
 import type { Dawg } from './dawg';
-import { normalizeWord } from './letters';
+import { normalizeLetter, normalizeWord } from './letters';
 import { validateMove } from './rules';
 import type {
   EndReason,
@@ -13,7 +13,8 @@ import type {
 
 /**
  * Партия «Балды»: ходы, пропуск, счёт, история использованных слов,
- * завершение по заполнению поля, лимиту пропусков или времени.
+ * завершение по заполнению поля, отсутствию ходов, лимиту пропусков,
+ * сдаче или времени.
  */
 export class Game {
   readonly config: GameConfig;
@@ -26,6 +27,8 @@ export class Game {
   status: GameStatus = 'playing';
   winner: number | null = null;
   endReason: EndReason = null;
+  /** Сколько игроков пасанули подряд без успешного хода между ними. */
+  private consecutivePasses = 0;
 
   constructor(
     dawg: Dawg,
@@ -52,11 +55,13 @@ export class Game {
     const player = this.players[move.player]!;
     player.score += points!;
     player.skipsInRow = 0;
+    this.consecutivePasses = 0;
     this.history.push({
       player: move.player,
       word: word!,
       points: points!,
-      letter: move.letter,
+      // Нормализуем так же, как Board.set: буква в истории совпадает с буквой на поле.
+      letter: normalizeLetter(move.letter),
       cell: move.cell,
     });
     this.usedWords.add(word!);
@@ -65,13 +70,22 @@ export class Game {
     return result;
   }
 
-  /** Пропуск хода. Достигнут лимит пропусков — техническое поражение. */
+  /**
+   * Пропуск хода. Если все игроки пасанули подряд — ходов больше нет,
+   * партия завершается по очкам (no_moves). Лимит пропусков одним игроком —
+   * техническое поражение (технические исходы определены для 2 игроков).
+   */
   pass(player: number): MoveResult {
     if (this.status !== 'playing') return { ok: false, error: 'GAME_FINISHED' };
     if (player !== this.currentPlayer) return { ok: false, error: 'NOT_PLAYERS_TURN' };
     this.players[player]!.skipsInRow += 1;
+    this.consecutivePasses += 1;
+    if (this.consecutivePasses >= this.players.length) {
+      this.finishByScore('no_moves');
+      return { ok: true };
+    }
     if (this.players[player]!.skipsInRow >= this.config.maxSkipsInRow) {
-      this.finish(player === 0 ? 1 : 0, 'skip_limit');
+      this.finish(this.opponentOf(player), 'skip_limit');
       return { ok: true };
     }
     this.nextTurn();
@@ -81,22 +95,34 @@ export class Game {
   /** Поражение по времени: игрок player превысил лимит часов. */
   declareTimeout(player: number): void {
     if (this.status !== 'playing') return;
-    this.finish(player === 0 ? 1 : 0, 'timeout');
+    this.finish(this.opponentOf(player), 'timeout');
+  }
+
+  /** Добровольная сдача: техническое поражение сдавшегося. */
+  resign(player: number): void {
+    if (this.status !== 'playing') return;
+    this.finish(this.opponentOf(player), 'resign');
+  }
+
+  /** Оппонент игрока (технические исходы определены для 2 игроков). */
+  private opponentOf(player: number): number {
+    return (player + 1) % this.players.length;
   }
 
   private nextTurn(): void {
     this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
   }
 
+  /** Завершить партию по очкам: при равенстве лидеров — ничья (winner = null). */
+  private finishByScore(reason: Exclude<EndReason, null>): void {
+    const scores = this.players.map((p) => p.score);
+    const best = Math.max(...scores);
+    const leaders = scores.filter((s) => s === best).length;
+    this.finish(leaders === 1 ? scores.indexOf(best) : null, reason);
+  }
+
   private updateStatus(): void {
-    if (this.board.isFull()) {
-      const scores = this.players.map((pl) => pl.score);
-      let winner = 0;
-      for (let i = 1; i < scores.length; i++) {
-        if (scores[i]! > scores[winner]!) winner = i;
-      }
-      this.finish(winner, 'board_full');
-    }
+    if (this.board.isFull()) this.finishByScore('board_full');
   }
 
   private finish(winner: number | null, reason: Exclude<EndReason, null>): void {

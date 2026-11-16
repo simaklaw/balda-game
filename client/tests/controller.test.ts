@@ -100,7 +100,13 @@ describe('LocalGameController', () => {
     const [human, ai] = ctrl.game.players.map((p) => p.score);
     const historySum = ctrl.game.history.reduce((sum, entry) => sum + entry.points, 0);
     expect(human + ai).toBe(historySum);
-    expect(ctrl.game.winner).not.toBeNull();
+    // Ничья теперь легитимный исход: при равном счёте winner === null.
+    // Старое ожидание (winner всегда не null) закрепляло баг «ничья = победа игрока 0».
+    if (human === ai) {
+      expect(ctrl.game.winner).toBeNull();
+    } else {
+      expect(ctrl.game.winner).not.toBeNull();
+    }
   });
 
   it('три пропуска подряд — техническое поражение', () => {

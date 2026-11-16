@@ -6,6 +6,7 @@ import type { NetClient } from '../net/NetClient';
 import type { RoomState, ServerMessage } from '../net/protocol';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
+import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
@@ -474,8 +475,10 @@ export class OnlineGameScene {
     );
     const you = this.state.you;
     const winner = msg.winner;
+    // Индекс с точки зрения игрока: 0 — сам игрок, 1 — соперник, null — ничья.
+    const over = gameOverText(winner === null ? null : winner === you ? 0 : 1, msg.reason);
     const title = new Text({
-      text: winner === null ? 'Ничья' : winner === you ? 'Победа!' : 'Поражение',
+      text: over.title,
       style: { fontFamily: FONT_FAMILY, fontSize: 30, fill: palette().text },
     });
     title.anchor.set(0.5);
@@ -495,6 +498,15 @@ export class OnlineGameScene {
     details.anchor.set(0.5, 0);
     details.position.set(width / 2, panelY + 84);
     overlay.addChild(details);
+    if (over.reason !== '') {
+      const reason = new Text({
+        text: over.reason,
+        style: { fontFamily: FONT_FAMILY, fontSize: 14, fill: palette().textDim },
+      });
+      reason.anchor.set(0.5);
+      reason.position.set(width / 2, panelY + 140);
+      overlay.addChild(reason);
+    }
     const btnMenu = new Button({
       caption: 'В меню',
       width: panelWidth - 44,

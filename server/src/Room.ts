@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, Game } from '@balda/shared';
+import { defaultConfigFor, Game } from '@balda/shared';
 import type { Dawg, GameConfig, MoveErrorCode, MoveInput } from '@balda/shared';
 import { calcElo, kFactor, CHIPS_PER_WIN } from './elo';
 import type { RoomState, ServerMessage } from './protocol';
@@ -123,7 +123,7 @@ export class Room {
     this.onFinished = options.onFinished;
     this.onEmpty = options.onEmpty;
     this.onStarted = options.onStarted;
-    const config = options.config ?? DEFAULT_CONFIG;
+    const config = options.config ?? defaultConfigFor(5);
     const initialWord = options.startWord ?? pickStartWord(config.boardSize);
     this.game = new Game(options.dawg, config, initialWord);
   }
@@ -276,12 +276,12 @@ export class Room {
     }
   }
 
-  /** Игрок покинул партию — техпоражение, если партия шла. */
+  /** Игрок покинул партию — сдача (техпоражение ушедшего), если партия шла. */
   leave(playerId: string): void {
     const index = this.indexOfPlayer(playerId);
     if (index === -1) return;
     if (this.isFull && !this.isFinished) {
-      this.game.declareTimeout(index);
+      this.game.resign(index);
       this.handleFinished();
     }
     this.removeSlot(index);

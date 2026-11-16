@@ -185,6 +185,29 @@ describe('Room', () => {
     expect(state!.winner).toBe(1);
   });
 
+  it('уход игрока — причина resign, а не timeout', () => {
+    room.leave(s0.playerId);
+    const state = p1.lastState();
+    expect(state!.endReason).toBe('resign');
+    const over = p1.gameOver();
+    expect(over).not.toBeNull();
+    expect(over!.reason).toBe('resign');
+  });
+
+  it('ничья: winner null, дельты рейтинга и фишек нулевые', () => {
+    // Два паса подряд при счёте 0:0 — no_moves, ничья.
+    room.pass(s0.playerId);
+    room.pass(s1.playerId);
+    const over = p0.gameOver();
+    expect(over).not.toBeNull();
+    expect(over!.winner).toBeNull();
+    expect(over!.reason).toBe('no_moves');
+    expect(over!.deltaRating).toEqual([0, 0]);
+    expect(over!.deltaChips).toEqual([0, 0]);
+    const state = p0.lastState();
+    expect(state!.endReason).toBe('no_moves');
+  });
+
   it('game-over содержит дельту рейтинга и фишки победителю', () => {
     const rated = makeRoom();
     const connA = new FakeConn();
@@ -257,6 +280,33 @@ describe('Matchmaker', () => {
     expect(winner!.wins).toBe(1);
     expect(winner!.chips).toBe(10);
     expect(mm.getProfile('Неизвестный')).toBeNull();
+    mm.dispose();
+    store.dispose();
+  });
+
+  it('ничья: applyResult вызван с won=false для обоих, дельты нулевые', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'balda-draw-'));
+    const store = new PlayerStore(join(dir, 'players.json'));
+    store.load();
+    const mm = new Matchmaker(dawg, { turnMs: 0, reconnectMs: 0, players: store });
+    const a = mm.quickMatch(new FakeConn(), 'НичьяА');
+    const b = mm.quickMatch(new FakeConn(), 'НичьяБ');
+    // Два паса подряд при счёте 0:0 — ничья (no_moves).
+    a.room.pass(a.playerId);
+    a.room.pass(b.playerId);
+    expect(a.room.lastOutcome).not.toBeNull();
+    expect(a.room.lastOutcome!.deltaRating).toEqual([0, 0]);
+    expect(a.room.lastOutcome!.deltaChips).toEqual([0, 0]);
+    const profA = mm.getProfile('НичьяА');
+    const profB = mm.getProfile('НичьяБ');
+    expect(profA).not.toBeNull();
+    expect(profB).not.toBeNull();
+    expect(profA!.games).toBe(1);
+    expect(profA!.wins).toBe(0);
+    expect(profA!.chips).toBe(0);
+    expect(profB!.games).toBe(1);
+    expect(profB!.wins).toBe(0);
+    expect(profB!.chips).toBe(0);
     mm.dispose();
     store.dispose();
   });

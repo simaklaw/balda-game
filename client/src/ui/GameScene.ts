@@ -1,5 +1,6 @@
 import { Application, Container, FederatedPointerEvent, Graphics, Text } from 'pixi.js';
 import type { CellPos, Dawg, Difficulty, MoveErrorCode } from '@balda/shared';
+import { defaultConfigFor } from '@balda/shared';
 import { LocalGameController } from '../game/LocalGameController';
 import { SelectionModel } from '../game/SelectionModel';
 import { TIME_PRESETS, TimerModel } from '../game/TimerModel';
@@ -7,6 +8,7 @@ import type { TimeControlKind } from '../game/TimerModel';
 import { lookupWord } from '../dict/definitions';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
+import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
@@ -101,12 +103,8 @@ export class GameScene {
     this.options = options;
     this.callbacks = callbacks;
 
-    const config = {
-      boardSize: options.boardSize,
-      allowDiagonal: false,
-      minWordLength: options.boardSize === 3 ? 3 : 4,
-      maxSkipsInRow: 3,
-    };
+    // Минимальная длина слова зависит от размера поля (см. defaultConfigFor).
+    const config = defaultConfigFor(options.boardSize);
     this.controller = new LocalGameController(options.dawg, config, INITIAL_WORDS[options.boardSize], {
       difficulty: options.difficulty,
     });
@@ -720,11 +718,11 @@ export class GameScene {
     const game = this.controller.game;
     const human = game.players[0]!.score;
     const ai = game.players[1]!.score;
-    const title = game.winner === 0 ? 'Победа!' : game.winner === 1 ? 'Поражение' : 'Ничья';
+    const over = gameOverText(game.winner, game.endReason);
     const titleColor =
-      game.winner === 0 ? palette().success : game.winner === 1 ? palette().danger : palette().text;
+      over.tone === 'success' ? palette().success : over.tone === 'danger' ? palette().danger : palette().text;
     const titleText = new Text({
-      text: title,
+      text: over.title,
       style: { fontFamily: FONT_FAMILY, fontSize: 32, fill: titleColor },
     });
     titleText.anchor.set(0.5);
@@ -737,15 +735,9 @@ export class GameScene {
     scoreText.anchor.set(0.5);
     scoreText.position.set(width / 2, panelY + 104);
     overlay.addChild(scoreText);
-    const reasonText =
-      game.endReason === 'timeout'
-        ? 'время вышло'
-        : game.endReason === 'skip_limit'
-          ? 'три пропуска подряд'
-          : '';
-    if (reasonText !== '') {
+    if (over.reason !== '') {
       const reason = new Text({
-        text: reasonText,
+        text: over.reason,
         style: { fontFamily: FONT_FAMILY, fontSize: 15, fill: palette().textDim },
       });
       reason.anchor.set(0.5);

@@ -1,4 +1,4 @@
-import { normalizeLetter, normalizeWord } from './letters';
+import { isCyrillicLetter, normalizeLetter, normalizeWord } from './letters';
 import type { CellPos } from './types';
 
 const ORTHO_DIRS = [
@@ -31,6 +31,11 @@ export class Board {
       const word = normalizeWord(initialWord);
       if (word.length !== size) {
         throw new Error(`Initial word must have ${size} letters for a ${size}x${size} board`);
+      }
+      for (const ch of word) {
+        if (!isCyrillicLetter(ch)) {
+          throw new Error(`Initial word must be Cyrillic: "${initialWord}"`);
+        }
       }
       const row = Math.floor(size / 2);
       for (let i = 0; i < size; i++) this.set(row, i, word[i]!);

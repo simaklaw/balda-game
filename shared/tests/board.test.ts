@@ -16,6 +16,11 @@ describe('Board', () => {
     expect(() => new Board(3, 'балда')).toThrow();
   });
 
+  it('отклоняет не-кириллическое начальное слово', () => {
+    expect(() => new Board(3, 'ко1')).toThrow();
+    expect(() => new Board(3, 'abc')).toThrow();
+  });
+
   it('соседство: центр, угол, диагональный режим', () => {
     const b = new Board(5, 'балда');
     expect(b.neighbors(2, 2, false)).toHaveLength(4);
