@@ -138,9 +138,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'leave':
       return { type: 'leave' };
     case 'profile':
-      return isStr(data.name) && data.name.length <= 64
-        ? { type: 'profile', name: data.name }
-        : null;
+      return isName(data.name) ? { type: 'profile', name: data.name } : null;
     default:
       return null;
   }
