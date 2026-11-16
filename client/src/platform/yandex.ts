@@ -1,4 +1,10 @@
-import type { PlatformAdapter, PlatformId, PlatformStorage } from './types';
+import type {
+  LeaderboardRow,
+  PlatformAdapter,
+  PlatformId,
+  PlatformLeaderboards,
+  PlatformStorage,
+} from './types';
 
 // SDK отдаётся с домена самой игры на площадке Яндекса (см. docs.yandex.ru).
 const SDK_URL = '/sdk.js';
@@ -8,6 +14,22 @@ export interface YandexPlayer {
   getName(): string;
   getData(keys?: string[]): Promise<Record<string, unknown>>;
   setData(data: Record<string, unknown>): Promise<void>;
+}
+
+/** Элемент ответа getLeaderboardEntries (минимально необходимое). */
+export interface YandexLeaderboardEntry {
+  rank: number;
+  score: number;
+  player?: { publicName?: string };
+}
+
+/** Нативные лидерборды Яндекс Игр (требуют создания в консоли разработчика). */
+export interface YandexLeaderboards {
+  setLeaderboardScore(name: string, score: number): Promise<void>;
+  getLeaderboardEntries(
+    name: string,
+    options?: { quantityTop?: number; includeUser?: boolean; quantityAround?: number },
+  ): Promise<{ entries?: YandexLeaderboardEntry[] }>;
 }
 
 export interface YandexSdk {
@@ -21,6 +43,7 @@ export interface YandexSdk {
     }): void;
   };
   getPlayer?: (options?: { scopes?: boolean }) => Promise<YandexPlayer>;
+  getLeaderboards?: () => Promise<YandexLeaderboards>;
 }
 
 declare global {
@@ -28,6 +51,9 @@ declare global {
     YaGames?: { init(): Promise<unknown> };
   }
 }
+
+/** Техническое имя нативного лидерборда (создаётся в консоли Яндекс Игр). */
+export const YANDEX_LEADERBOARD = 'baldaScore';
 
 /** Загружает SDK Яндекс Игр; вне их окружения или при сбое возвращает null. */
 export async function loadYandexSdk(): Promise<YandexSdk | null> {
@@ -52,13 +78,15 @@ export async function loadYandexSdk(): Promise<YandexSdk | null> {
 
 /**
  * Платформа Яндекс Игр: LoadingAPI.ready, межстраничная реклама между
- * партиями, облачное хранилище игрока с фолбэком на localStorage.
+ * партиями, облачное хранилище игрока с фолбэком на localStorage,
+ * нативный лидерборд.
  */
 export class YandexAdapter implements PlatformAdapter {
   readonly id: PlatformId = 'yandex';
   private readonly sdk: YandexSdk;
   private player: YandexPlayer | null = null;
   private playerRequested = false;
+  private leaderboardsApi: YandexLeaderboards | null | undefined;
 
   constructor(sdk: YandexSdk) {
     this.sdk = sdk;
@@ -115,6 +143,43 @@ export class YandexAdapter implements PlatformAdapter {
       }
     });
   }
+
+  /** Нативный лидерборд: отправка результата и чтение топа. */
+  readonly leaderboards: PlatformLeaderboards = {
+    submitScore: async (score) => {
+      const api = await this.ensureLeaderboards();
+      if (api === null) return;
+      await api.setLeaderboardScore(YANDEX_LEADERBOARD, Math.max(0, Math.floor(score)));
+    },
+    getTopScores: async (limit = 10) => {
+      const api = await this.ensureLeaderboards();
+      if (api === null) return null;
+      try {
+        const data = await api.getLeaderboardEntries(YANDEX_LEADERBOARD, {
+          quantityTop: Math.max(1, Math.min(20, Math.floor(limit))),
+          includeUser: true,
+          quantityAround: 0,
+        });
+        const rows: LeaderboardRow[] = [];
+        for (const entry of data?.entries ?? []) {
+          const score = entry?.score;
+          const rank = entry?.rank;
+          if (typeof score !== 'number' || !Number.isFinite(score)) continue;
+          if (typeof rank !== 'number' || !Number.isFinite(rank)) continue;
+          const name = entry?.player?.publicName;
+          rows.push({
+            rank: Math.max(1, Math.floor(rank)),
+            name: typeof name === 'string' ? name : '',
+            score: Math.max(0, Math.floor(score)),
+          });
+        }
+        return rows;
+      } catch {
+        // Лидерборд ещё не создан в консоли или API недоступен — не ошибка игры.
+        return null;
+      }
+    },
+  };
 
   readonly storage: PlatformStorage = {
     get: async (key) => {
@@ -179,5 +244,20 @@ export class YandexAdapter implements PlatformAdapter {
       this.player = null;
     }
     return this.player;
+  }
+
+  private async ensureLeaderboards(): Promise<YandexLeaderboards | null> {
+    if (this.leaderboardsApi !== undefined) return this.leaderboardsApi;
+    const get = this.sdk.getLeaderboards;
+    if (typeof get !== 'function') {
+      this.leaderboardsApi = null;
+      return null;
+    }
+    try {
+      this.leaderboardsApi = await get.call(this.sdk);
+    } catch {
+      this.leaderboardsApi = null;
+    }
+    return this.leaderboardsApi;
   }
 }

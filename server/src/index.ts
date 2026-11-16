@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 import { loadDictionary } from './dictionary';
 import { Matchmaker } from './Matchmaker';
+import { Metrics } from './metrics';
 import { parseClientMessage } from './protocol';
 import type { ServerMessage } from './protocol';
 import { PlayerStore } from './PlayerStore';
@@ -40,6 +41,9 @@ playerStore.load();
 
 const matchmaker = new Matchmaker(dawg, { players: playerStore });
 
+// Метрики: /metrics отдаёт счётчики и датчики в формате Prometheus.
+const metrics = new Metrics();
+
 interface Session {
   roomId: string;
   playerId: string;
@@ -47,6 +51,12 @@ interface Session {
 
 const sessions = new WeakMap<WebSocket, Session>();
 const socketsPerIp = new Map<string, number>();
+
+metrics.gauge('balda_sockets_current', () =>
+  [...socketsPerIp.values()].reduce((sum, n) => sum + n, 0),
+);
+metrics.gauge('balda_rooms_current', () => matchmaker.roomCount);
+metrics.gauge('balda_players_stored', () => playerStore.size);
 
 function sendTo(socket: WebSocket, msg: ServerMessage): void {
   if (socket.readyState === 1) socket.send(JSON.stringify(msg));
@@ -81,6 +91,11 @@ const httpServer = createServer((req, res) => {
     }));
     return;
   }
+  if (req.url === '/metrics') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
+    res.end(metrics.render());
+    return;
+  }
   res.writeHead(404);
   res.end();
 });
@@ -93,6 +108,7 @@ const wss = new WebSocketServer({
     if (originAllowed(info.origin, info.req)) {
       callback(true);
     } else {
+      metrics.inc('balda_ws_rejected_total');
       callback(false, 403, 'Origin запрещён');
     }
   },
@@ -103,10 +119,12 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
   const ip = req.socket.remoteAddress ?? 'unknown';
   const current = socketsPerIp.get(ip) ?? 0;
   if (current >= MAX_SOCKETS_PER_IP) {
+    metrics.inc('balda_ws_rejected_total');
     socket.close(1008, 'Слишком много соединений');
     return;
   }
   socketsPerIp.set(ip, current + 1);
+  metrics.inc('balda_ws_connections_total');
   socket.on('close', () => {
     const count = socketsPerIp.get(ip) ?? 1;
     if (count <= 1) socketsPerIp.delete(ip);
@@ -129,20 +147,24 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
     }
     messagesInWindow += 1;
     if (messagesInWindow > MAX_MESSAGES_PER_WINDOW) {
+      metrics.inc('balda_ws_flood_closed_total');
       socket.close(1008, 'Слишком много сообщений');
       return;
     }
 
     const msg = parseClientMessage(raw.toString());
     if (msg === null) {
+      metrics.inc('balda_messages_invalid_total');
       sendTo(socket, { type: 'error', message: 'Неизвестное сообщение' });
       return;
     }
+    metrics.inc('balda_messages_total');
     try {
       switch (msg.type) {
         case 'quick-match': {
           const res = matchmaker.quickMatch(conn, msg.name);
           sessions.set(socket, { roomId: res.room.id, playerId: res.playerId });
+          metrics.inc('balda_quickmatch_total');
           sendTo(socket, {
             type: 'joined',
             roomId: res.room.id,
@@ -156,6 +178,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
         case 'create-room': {
           const res = matchmaker.createRoom(conn, msg.name);
           sessions.set(socket, { roomId: res.room.id, playerId: res.playerId });
+          metrics.inc('balda_createroom_total');
           sendTo(socket, {
             type: 'joined',
             roomId: res.room.id,
@@ -173,6 +196,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
             break;
           }
           sessions.set(socket, { roomId: res.room.id, playerId: res.playerId });
+          metrics.inc('balda_joinroom_total');
           sendTo(socket, {
             type: 'joined',
             roomId: res.room.id,
@@ -191,6 +215,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
             break;
           }
           room.move(session.playerId, { path: msg.path, cell: msg.cell, letter: msg.letter });
+          metrics.inc('balda_moves_total');
           break;
         }
         case 'pass': {
@@ -201,6 +226,7 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
             break;
           }
           room.pass(session.playerId);
+          metrics.inc('balda_passes_total');
           break;
         }
         case 'reconnect': {
@@ -215,10 +241,12 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
             break;
           }
           sessions.set(socket, { roomId: room.id, playerId: msg.playerId });
+          metrics.inc('balda_reconnects_total');
           break;
         }
         case 'profile': {
           const name = msg.name.trim().slice(0, 24);
+          metrics.inc('balda_profiles_total');
           sendTo(socket, { type: 'profile', name, profile: matchmaker.getProfile(name) });
           break;
         }
@@ -227,10 +255,12 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
           const room = session ? matchmaker.getRoom(session.roomId) : undefined;
           if (session && room) room.leave(session.playerId);
           sessions.delete(socket);
+          metrics.inc('balda_leaves_total');
           break;
         }
       }
     } catch (err) {
+      metrics.inc('balda_handler_errors_total');
       sendTo(socket, { type: 'error', message: err instanceof Error ? err.message : 'Ошибка сервера' });
     }
   });
@@ -246,7 +276,10 @@ wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
 httpServer.listen(PORT, () => {
   console.log('[server] словарь: ' + dictSize + ' слов (' + dictSource + ')');
   console.log('[server] профили: ' + PLAYERS_PATH + ' (' + playerStore.size + ' игроков)');
-  console.log('[server] ws://0.0.0.0:' + PORT + '/ws, health: http://0.0.0.0:' + PORT + '/health');
+  console.log(
+    '[server] ws://0.0.0.0:' + PORT + '/ws, health: http://0.0.0.0:' + PORT + '/health, ' +
+      'metrics: http://0.0.0.0:' + PORT + '/metrics',
+  );
 });
 
 // Graceful shutdown: сбрасываем профили на диск и останавливаем таймеры комнат.

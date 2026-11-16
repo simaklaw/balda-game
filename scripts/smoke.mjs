@@ -3,12 +3,13 @@
  * Сквозной smoke-тест (по мотивам аудита Qwen, §9.2): сервер должен не просто
  * собираться, а играть. Поднимается снаружи (CI или `npm run start --workspace server`),
  * скрипт подключает двух WS-клиентов и проверяет живой сценарий:
- * матч → старт партии → отказ мусорного хода → pass → профиль → reconnect-отказ.
- * Код выхода 0/1. Запуск: node scripts/smoke.mjs
+ * матч → старт партии → отказ мусорного хода → pass → профиль → reconnect-отказ
+ * → /metrics. Код выхода 0/1. Запуск: node scripts/smoke.mjs
  */
 import WebSocket from 'ws';
 
 const WS_URL = process.env.SMOKE_WS_URL ?? 'ws://127.0.0.1:3001/ws';
+const HTTP_URL = process.env.SMOKE_HTTP_URL ?? 'http://127.0.0.1:3001';
 const TIMEOUT_MS = 5000;
 
 let failures = 0;
@@ -134,6 +135,19 @@ async function main() {
   a.send({ type: 'reconnect', roomId: joinedA !== null ? joinedA.roomId : 'X', playerId: 'угонщик', token: 'фейк' });
   const err3 = await a.expect('error на фейк-reconnect', (m) => isError(m) && m !== err1 && m !== err2);
   if (err3 !== null) ok('фейк-reconnect отклонён: ' + err3.message);
+
+  // 8. /metrics отдаёт Prometheus-текст с нашими счётчиками и датчиками.
+  try {
+    const res = await fetch(HTTP_URL + '/metrics');
+    const body = await res.text();
+    if (res.ok && body.includes('balda_messages_total') && body.includes('balda_sockets_current')) {
+      ok('/metrics отдаёт счётчики (' + body.split('\n').filter((l) => l && !l.startsWith('#')).length + ' строк)');
+    } else {
+      fail('/metrics: статус ' + res.status + ', тело: ' + body.slice(0, 120));
+    }
+  } catch (err) {
+    fail('/metrics недоступен: ' + (err instanceof Error ? err.message : String(err)));
+  }
 
   a.close();
   b.close();

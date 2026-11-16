@@ -1,6 +1,7 @@
 import { Application, Container, Text } from 'pixi.js';
 import { loadDawg } from './dict/dictionary';
 import { createAdapter, shouldShowInterstitial } from './platform';
+import type { LeaderboardRow } from './platform';
 import { addResult, parseLeaderboard, serializeLeaderboard, LEADERBOARD_KEY } from './game/leaderboard';
 import type { LeaderboardEntry } from './game/leaderboard';
 import { setTheme } from './theme';
@@ -103,6 +104,15 @@ async function bootstrap(): Promise<void> {
       } catch {
         /* рейтинг не критичен */
       }
+      // Нативный лидерборд площадки (Яндекс): платформа сама хранит максимум.
+      const native = adapter.leaderboards;
+      if (native !== undefined) {
+        try {
+          await native.submitScore(score);
+        } catch {
+          /* без нативного лидерборда играем дальше */
+        }
+      }
     })();
   };
 
@@ -148,6 +158,16 @@ async function bootstrap(): Promise<void> {
       } catch {
         /* пустой рейтинг лучше сломанного меню */
       }
+      // Топ нативного лидерборда площадки (Яндекс), если он доступен.
+      let nativeTop: LeaderboardRow[] = [];
+      const native = adapter.leaderboards;
+      if (native !== undefined) {
+        try {
+          nativeTop = (await native.getTopScores(10)) ?? [];
+        } catch {
+          nativeTop = [];
+        }
+      }
       setScene(
         new MenuScene(
           app,
@@ -168,6 +188,7 @@ async function bootstrap(): Promise<void> {
             onOnline: showLobby,
           },
           leaderboard,
+          nativeTop,
         ),
       );
     })();

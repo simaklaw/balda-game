@@ -3,6 +3,7 @@ import type { Difficulty } from '@balda/shared';
 import type { TimeControlKind } from '../game/TimerModel';
 import { formatEntry } from '../game/leaderboard';
 import type { LeaderboardEntry } from '../game/leaderboard';
+import type { LeaderboardRow } from '../platform/types';
 import { safeInsets } from './safeArea';
 import { Button } from './Button';
 import { FONT_FAMILY, palette, setTheme, themeKind } from '../theme';
@@ -69,6 +70,7 @@ export class MenuScene {
   private readonly btnOnline: Button;
   private readonly btnPlay: Button;
   private readonly leaderboard: readonly LeaderboardEntry[];
+  private readonly nativeTop: readonly LeaderboardRow[];
   private difficulty: Difficulty = 'medium';
   private boardSize: 3 | 5 = 5;
   private timeControl: TimeControlKind = 'classic';
@@ -77,10 +79,12 @@ export class MenuScene {
     app: Application,
     callbacks: MenuSceneCallbacks,
     leaderboard: readonly LeaderboardEntry[] = [],
+    nativeTop: readonly LeaderboardRow[] = [],
   ) {
     this.app = app;
     this.callbacks = callbacks;
     this.leaderboard = leaderboard;
+    this.nativeTop = nativeTop;
     this.title = new Text({
       text: 'БАЛДА',
       style: { fontFamily: FONT_FAMILY, fontSize: 56, fill: palette().text },
@@ -308,18 +312,26 @@ export class MenuScene {
     this.view.addChild(overlay);
   }
 
-  /** Панель локального рейтинга: топ личных результатов оффлайн-партий. */
+  /**
+   * Панель рейтинга: локальный топ оффлайн-партий и, если площадка
+   * предоставляет нативный лидерборд (Яндекс), топ площадки под ним.
+   */
   private showLeaderboard(): void {
     const insets = safeInsets();
     const width = this.app.screen.width;
     const height = this.app.screen.height;
     const lineHeight = 22;
     const fontSize = 15;
+    const nativeCount = this.nativeTop.length;
+    const nativeBlock = nativeCount > 0 ? 34 + nativeCount * lineHeight : 0;
     const overlay = new Container();
     overlay.eventMode = 'static';
     overlay.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.75 }));
     const panelWidth = Math.min(340, width - 40);
-    const panelHeight = Math.min(height - 80, 110 + this.leaderboard.length * lineHeight + 64);
+    const panelHeight = Math.min(
+      height - 80,
+      110 + this.leaderboard.length * lineHeight + nativeBlock + 64,
+    );
     const panelX = Math.floor((width - panelWidth) / 2);
     const panelY = Math.max(48 + insets.top, Math.floor((height - panelHeight) / 2));
     overlay.addChild(
@@ -351,6 +363,26 @@ export class MenuScene {
         });
         line.anchor.set(0.5, 0);
         line.position.set(width / 2, panelY + 58 + i * lineHeight);
+        overlay.addChild(line);
+      });
+    }
+    if (nativeCount > 0) {
+      const nativeY = panelY + 58 + this.leaderboard.length * lineHeight;
+      const caption = new Text({
+        text: 'Топ площадки',
+        style: { fontFamily: FONT_FAMILY, fontSize: 13, fill: palette().textDim },
+      });
+      caption.anchor.set(0.5, 0);
+      caption.position.set(width / 2, nativeY);
+      overlay.addChild(caption);
+      this.nativeTop.forEach((row, i) => {
+        const label = row.name === '' ? 'Игрок' : row.name;
+        const line = new Text({
+          text: row.rank + '. ' + label + ' — ' + row.score,
+          style: { fontFamily: FONT_FAMILY, fontSize, fill: palette().text, lineHeight },
+        });
+        line.anchor.set(0.5, 0);
+        line.position.set(width / 2, nativeY + 24 + i * lineHeight);
         overlay.addChild(line);
       });
     }

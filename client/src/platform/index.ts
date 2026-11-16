@@ -5,7 +5,13 @@ import { VKAdapter } from './vk';
 import type { VkBridgeApi } from './vk';
 import { TelegramAdapter, getTelegramWebApp } from './telegram';
 
-export type { PlatformAdapter, PlatformId, PlatformStorage } from './types';
+export type {
+  LeaderboardRow,
+  PlatformAdapter,
+  PlatformId,
+  PlatformLeaderboards,
+  PlatformStorage,
+} from './types';
 
 /** Минимальный интервал между межстраничными рекламами. */
 export const AD_MIN_INTERVAL_MS = 180000;

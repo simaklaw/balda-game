@@ -5,7 +5,7 @@ import type { TelegramWebAppLike } from '../src/platform/telegram';
 import { VKAdapter } from '../src/platform/vk';
 import type { VkBridgeApi } from '../src/platform/vk';
 import { YandexAdapter } from '../src/platform/yandex';
-import type { YandexPlayer, YandexSdk } from '../src/platform/yandex';
+import type { YandexLeaderboardEntry, YandexLeaderboards, YandexPlayer, YandexSdk } from '../src/platform/yandex';
 
 describe('detectPlatform', () => {
   it('распознаёт Яндекс Игры по URL', () => {
@@ -345,5 +345,97 @@ describe('YandexAdapter', () => {
 
   it('showInterstitial без adv завершается сразу', async () => {
     await expect(new YandexAdapter({}).showInterstitial()).resolves.toBeUndefined();
+  });
+});
+
+describe('YandexAdapter.leaderboards', () => {
+  /** Фейковый API лидербордов с записью вызовов. */
+  const makeLb = (overrides: Partial<YandexLeaderboards> = {}): YandexLeaderboards & {
+    scores: { name: string; score: number }[];
+  } => {
+    const scores: { name: string; score: number }[] = [];
+    return {
+      scores,
+      setLeaderboardScore: async (name, score) => {
+        scores.push({ name, score });
+      },
+      getLeaderboardEntries: async () => ({
+        // Мусорные записи приходят «снаружи» — эмулируем это через cast.
+        entries: [
+          { rank: 1, score: 340, player: { publicName: 'Аня' } },
+          { rank: 2, score: 210, player: {} },
+          { rank: 'мусор', score: 100 },
+          { rank: 4, score: 'мусор' },
+        ] as unknown as YandexLeaderboardEntry[],
+      }),
+      ...overrides,
+    };
+  };
+
+  const makeSdk = (api: YandexLeaderboards | null): YandexSdk =>
+    api === null ? {} : { getLeaderboards: async () => api };
+
+  it('submitScore шлёт результат с техническим именем лидерборда', async () => {
+    const lb = makeLb();
+    const adapter = new YandexAdapter(makeSdk(lb));
+    await expect(adapter.leaderboards.submitScore(12.7)).resolves.toBeUndefined();
+    expect(lb.scores).toEqual([{ name: 'baldaScore', score: 12 }]);
+  });
+
+  it('submitScore с отрицательным результатом шлёт 0', async () => {
+    const lb = makeLb();
+    const adapter = new YandexAdapter(makeSdk(lb));
+    await adapter.leaderboards.submitScore(-5);
+    expect(lb.scores).toEqual([{ name: 'baldaScore', score: 0 }]);
+  });
+
+  it('без getLeaderboards в SDK submitScore — тихая пустая операция', async () => {
+    const adapter = new YandexAdapter({});
+    await expect(adapter.leaderboards.submitScore(10)).resolves.toBeUndefined();
+    await expect(adapter.leaderboards.getTopScores()).resolves.toBeNull();
+  });
+
+  it('сбой getLeaderboards → getTopScores возвращает null', async () => {
+    const sdk: YandexSdk = {
+      getLeaderboards: async () => {
+        throw new Error('нет API');
+      },
+    };
+    const adapter = new YandexAdapter(sdk);
+    await expect(adapter.leaderboards.getTopScores()).resolves.toBeNull();
+  });
+
+  it('getTopScores маппит записи, мусор отбрасывает', async () => {
+    const adapter = new YandexAdapter(makeSdk(makeLb()));
+    const rows = await adapter.leaderboards.getTopScores(10);
+    expect(rows).toEqual([
+      { rank: 1, name: 'Аня', score: 340 },
+      { rank: 2, name: '', score: 210 },
+    ]);
+  });
+
+  it('getTopScores ограничивает limit разумными границами', async () => {
+    let captured: { quantityTop?: number } | undefined;
+    const lb = makeLb({
+      getLeaderboardEntries: async (_name, options) => {
+        captured = options;
+        return { entries: [] };
+      },
+    });
+    const adapter = new YandexAdapter(makeSdk(lb));
+    await adapter.leaderboards.getTopScores(0);
+    expect(captured?.quantityTop).toBe(1);
+    await adapter.leaderboards.getTopScores(1000);
+    expect(captured?.quantityTop).toBe(20);
+  });
+
+  it('сбой getLeaderboardEntries (лидерборд не создан) → null', async () => {
+    const lb = makeLb({
+      getLeaderboardEntries: async () => {
+        throw new Error('LEADERBOARD_NOT_FOUND');
+      },
+    });
+    const adapter = new YandexAdapter(makeSdk(lb));
+    await expect(adapter.leaderboards.getTopScores()).resolves.toBeNull();
   });
 });
