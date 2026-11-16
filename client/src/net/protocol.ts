@@ -69,7 +69,42 @@ const SERVER_TYPES: ReadonlySet<string> = new Set([
   'profile',
 ]);
 
-/** Разбор сообщения сервера; возвращает null для мусора. */
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
+const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
+
+/** board — квадратный массив строк; players — 2 слота с числами. */
+function isRoomState(v: unknown): v is RoomState {
+  if (!isObj(v)) return false;
+  if (!isStr(v.roomId) || !isInt(v.size) || v.size < 3 || v.size > 7) return false;
+  if (!Array.isArray(v.board) || v.board.length !== v.size) return false;
+  for (const row of v.board) {
+    if (!Array.isArray(row) || row.length !== v.size) return false;
+    if (!row.every((c) => isStr(c))) return false;
+  }
+  if (!Array.isArray(v.players) || v.players.length !== 2) return false;
+  for (const pl of v.players) {
+    if (!isObj(pl) || !isStr(pl.name) || !isNum(pl.score) || !isBool(pl.connected)) return false;
+  }
+  if (!isInt(v.currentPlayer) || !isStr(v.status)) return false;
+  if (!Array.isArray(v.history)) return false;
+  if (v.winner !== null && !isInt(v.winner)) return false;
+  if (v.turnDeadline !== null && !isNum(v.turnDeadline)) return false;
+  if (!isInt(v.you)) return false;
+  return true;
+}
+
+function isNumArray(v: unknown, len: number): v is number[] {
+  return Array.isArray(v) && v.length === len && v.every(isNum);
+}
+
+/**
+ * Разбор сообщения сервера.
+ * Проверяет type и структуру state / scores — битое сообщение не уронит сцену.
+ */
 export function parseServerMessage(raw: string): ServerMessage | null {
   let data: unknown;
   try {
@@ -77,8 +112,50 @@ export function parseServerMessage(raw: string): ServerMessage | null {
   } catch {
     return null;
   }
-  if (typeof data !== 'object' || data === null) return null;
-  const type = (data as { type?: unknown }).type;
-  if (typeof type !== 'string' || !SERVER_TYPES.has(type)) return null;
-  return data as ServerMessage;
+  if (!isObj(data)) return null;
+  const type = data.type;
+  if (!isStr(type) || !SERVER_TYPES.has(type)) return null;
+
+  switch (type) {
+    case 'joined':
+      return isStr(data.roomId) &&
+        isStr(data.playerId) &&
+        isStr(data.token) &&
+        isInt(data.you) &&
+        isRoomState(data.state)
+        ? {
+            type: 'joined',
+            roomId: data.roomId,
+            playerId: data.playerId,
+            token: data.token,
+            you: data.you,
+            state: data.state,
+          }
+        : null;
+    case 'state':
+      return isRoomState(data.state) ? { type: 'state', state: data.state } : null;
+    case 'error':
+      return isStr(data.message) ? { type: 'error', message: data.message } : null;
+    case 'game-over':
+      return (data.winner === null || isInt(data.winner)) &&
+        isNumArray(data.scores, 2) &&
+        isStr(data.reason) &&
+        isNumArray(data.deltaRating, 2) &&
+        isNumArray(data.deltaChips, 2)
+        ? {
+            type: 'game-over',
+            winner: data.winner as number | null,
+            scores: data.scores,
+            reason: data.reason as EndReason,
+            deltaRating: data.deltaRating,
+            deltaChips: data.deltaChips,
+          }
+        : null;
+    case 'profile':
+      return isStr(data.name)
+        ? { type: 'profile', name: data.name, profile: (data.profile as PlayerProfile | null) ?? null }
+        : null;
+    default:
+      return null;
+  }
 }

@@ -42,4 +42,15 @@ describe('Metrics', () => {
   it('пустые метрики — пустая строка', () => {
     expect(new Metrics().render()).toBe('');
   });
+
+  it('счётчик с labels попадает в render', () => {
+    const m = new Metrics();
+    m.inc('balda_move_rejected_total', { code: 'NOT_IN_DICT' });
+    m.inc('balda_move_rejected_total', { code: 'NOT_IN_DICT' });
+    m.inc('balda_move_rejected_total', { code: 'NOT_YOUR_TURN' });
+    const text = m.render();
+    expect(text).toContain('# TYPE balda_move_rejected_total counter');
+    expect(text).toContain('balda_move_rejected_total{code="NOT_IN_DICT"} 2');
+    expect(text).toContain('balda_move_rejected_total{code="NOT_YOUR_TURN"} 1');
+  });
 });
