@@ -57,8 +57,8 @@ function sendTo(socket: WebSocket, msg: ServerMessage): void {
  * браузер всегда шлёт Origin — пускаем только свои площадки и same-origin
  * (за Caddy/nginx). Не-браузерные клиенты (без Origin) не страдают.
  */
-function originAllowed(origin: string, req: IncomingMessage): boolean {
-  if (origin === '') return true;
+function originAllowed(origin: string | undefined, req: IncomingMessage): boolean {
+  if (!origin) return true; // не-браузерные клиенты (Node, боты) не шлют Origin
   if (ALLOWED_ORIGINS.includes(origin)) return true;
   const host = req.headers.host;
   if (host === undefined) return false;
