@@ -11,5 +11,8 @@
   "dependencies": {
     "@balda/shared": "*",
     "ws": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
   }
 }

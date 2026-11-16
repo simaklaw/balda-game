@@ -162,8 +162,8 @@ describe('Room', () => {
   it('уход игрока в начавшейся партии — техпоражение ушедшего', () => {
     room.leave(s0.playerId);
     const state = p1.lastState();
-    expect(state.status).toBe('finished');
-    expect(state.winner).toBe(1);
+    expect(state!.status).toBe('finished');
+    expect(state!.winner).toBe(1);
   });
 
   it('game-over содержит дельту рейтинга и фишки победителю', () => {
