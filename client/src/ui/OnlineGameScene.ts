@@ -287,14 +287,17 @@ export class OnlineGameScene {
   }
 
   private updateTimers(): void {
-    const clocks = this.state.clocksMs;
-    if (!clocks) {
-      this.timerText.text = '';
+    if (this.state.status !== 'playing' || this.state.turnDeadline === null) {
+      this.timerText.visible = false;
       return;
     }
-    const mine = clocks[this.state.you] ?? 0;
-    const theirs = clocks[this.state.you === 0 ? 1 : 0] ?? 0;
-    this.timerText.text = formatClock(mine) + ' / ' + formatClock(theirs);
+    this.timerText.visible = true;
+    const left = this.state.turnDeadline - Date.now();
+    this.timerText.text = 'На ход: ' + formatClock(left);
+    this.timerText.style.fill =
+      left <= 10_000 && this.state.currentPlayer === this.state.you
+        ? palette().danger
+        : palette().textDim;
   }
 
   private refresh(): void {
