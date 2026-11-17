@@ -1,5 +1,5 @@
 import { parseServerMessage } from './protocol';
-import type { ClientMessage, ServerMessage } from './protocol';
+import type { AuthProvider, ClientMessage, ServerMessage } from './protocol';
 
 /** Хранилище сессии (PlatformStorage адаптера платформы). */
 export interface SessionStore {
@@ -15,6 +15,13 @@ export interface StoredSession {
 }
 
 export const SESSION_KEY = 'balda.online.session';
+export const ACCOUNT_KEY = 'balda.online.account';
+
+export interface AccountCredentials {
+  accountId: string;
+  secret: string;
+  provider: AuthProvider;
+}
 
 type MessageHandler = (msg: ServerMessage) => void;
 
@@ -30,6 +37,7 @@ export interface NetClientOptions {
 export class NetClient {
   private ws: WebSocket | null = null;
   private session: StoredSession | null = null;
+  private account: AccountCredentials | null = null;
   private closedByUser = false;
 
   constructor(
@@ -99,6 +107,91 @@ export class NetClient {
     return this.session !== null;
   }
 
+  /**
+   * Вход на сервер. Guest: создаёт TOFU-аккаунт или восстанавливает по secret.
+   * Сохраняет secret в platform storage.
+   */
+  authenticate(opts: {
+    provider: AuthProvider;
+    name: string;
+    externalId?: string;
+    proof?: string;
+  }): Promise<{ ok: true; accountId: string; name: string } | { ok: false; message: string }> {
+    return new Promise((resolve) => {
+      if (!this.connected) {
+        resolve({ ok: false, message: 'Нет соединения' });
+        return;
+      }
+      let settled = false;
+      const prev = this.handlers.onMessage;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.handlers.onMessage = prev;
+        resolve({ ok: false, message: 'Таймаут входа' });
+      }, 8000);
+
+      this.handlers.onMessage = (msg) => {
+        if (msg.type === 'auth-ok') {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          this.handlers.onMessage = prev;
+          if (typeof msg.secret === 'string' && msg.secret.length > 0) {
+            this.account = {
+              accountId: msg.accountId,
+              secret: msg.secret,
+              provider: opts.provider,
+            };
+            void this.persistAccount();
+          } else if (this.account?.accountId === msg.accountId) {
+            /* secret уже есть */
+          } else {
+            this.account = {
+              accountId: msg.accountId,
+              secret: this.account?.secret ?? '',
+              provider: opts.provider,
+            };
+          }
+          resolve({ ok: true, accountId: msg.accountId, name: msg.name });
+          return;
+        }
+        if (msg.type === 'auth-failed' || msg.type === 'error') {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          this.handlers.onMessage = prev;
+          resolve({ ok: false, message: msg.message });
+          return;
+        }
+        prev(msg);
+      };
+
+      void this.restoreAccount().then((saved) => {
+        const payload: ClientMessage = {
+          type: 'auth',
+          provider: opts.provider,
+          name: opts.name,
+          externalId: opts.externalId,
+          proof: opts.proof,
+        };
+        if (
+          saved !== null &&
+          saved.provider === opts.provider &&
+          saved.secret.length > 0
+        ) {
+          payload.accountId = saved.accountId;
+          payload.secret = saved.secret;
+        }
+        this.send(payload);
+      });
+    });
+  }
+
+  get accountId(): string | null {
+    return this.account?.accountId ?? null;
+  }
+
   /** Переподключиться и восстановить слот по сохранённой сессии. */
   async reconnect(): Promise<boolean> {
     if (this.session === null) {
@@ -164,6 +257,40 @@ export class NetClient {
     if (this.store === undefined) return;
     try {
       await this.store.remove(SESSION_KEY);
+    } catch {
+      /* не критично */
+    }
+  }
+
+  private async restoreAccount(): Promise<AccountCredentials | null> {
+    if (this.account !== null) return this.account;
+    if (this.store === undefined) return null;
+    try {
+      const raw = await this.store.get(ACCOUNT_KEY);
+      if (raw === null) return null;
+      const parsed = JSON.parse(raw) as Partial<AccountCredentials>;
+      if (
+        typeof parsed.accountId === 'string' &&
+        typeof parsed.secret === 'string' &&
+        typeof parsed.provider === 'string'
+      ) {
+        this.account = {
+          accountId: parsed.accountId,
+          secret: parsed.secret,
+          provider: parsed.provider as AuthProvider,
+        };
+        return this.account;
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  private async persistAccount(): Promise<void> {
+    if (this.store === undefined || this.account === null) return;
+    try {
+      await this.store.set(ACCOUNT_KEY, JSON.stringify(this.account));
     } catch {
       /* не критично */
     }

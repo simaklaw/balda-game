@@ -30,7 +30,18 @@ export interface PlayerProfile {
   wins: number;
 }
 
+export type AuthProvider = 'vk' | 'ok' | 'telegram' | 'yandex' | 'guest';
+
 export type ClientMessage =
+  | {
+      type: 'auth';
+      provider: AuthProvider;
+      name: string;
+      externalId?: string;
+      proof?: string;
+      accountId?: string;
+      secret?: string;
+    }
   | { type: 'quick-match'; name: string }
   | { type: 'create-room'; name: string }
   | { type: 'join-room'; name: string; roomId: string }
@@ -38,7 +49,7 @@ export type ClientMessage =
   | { type: 'pass' }
   | { type: 'reconnect'; roomId: string; playerId: string; token: string }
   | { type: 'leave' }
-  | { type: 'profile'; name: string };
+  | { type: 'profile'; name?: string };
 
 export type ServerMessage =
   | {
@@ -59,7 +70,15 @@ export type ServerMessage =
       deltaRating: number[];
       deltaChips: number[];
     }
-  | { type: 'profile'; name: string; profile: PlayerProfile | null };
+  | { type: 'profile'; name: string; profile: PlayerProfile | null }
+  | {
+      type: 'auth-ok';
+      accountId: string;
+      secret?: string;
+      name: string;
+      profile: PlayerProfile;
+    }
+  | { type: 'auth-failed'; message: string };
 
 const SERVER_TYPES: ReadonlySet<string> = new Set([
   'joined',
@@ -67,6 +86,8 @@ const SERVER_TYPES: ReadonlySet<string> = new Set([
   'error',
   'game-over',
   'profile',
+  'auth-ok',
+  'auth-failed',
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -155,6 +176,18 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return isStr(data.name)
         ? { type: 'profile', name: data.name, profile: (data.profile as PlayerProfile | null) ?? null }
         : null;
+    case 'auth-ok':
+      return isStr(data.accountId) && isStr(data.name) && isObj(data.profile)
+        ? {
+            type: 'auth-ok',
+            accountId: data.accountId,
+            secret: isStr(data.secret) ? data.secret : undefined,
+            name: data.name,
+            profile: data.profile as PlayerProfile,
+          }
+        : null;
+    case 'auth-failed':
+      return isStr(data.message) ? { type: 'auth-failed', message: data.message } : null;
     default:
       return null;
   }
