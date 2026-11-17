@@ -38,6 +38,32 @@ function buildTelegramInitData(
   return params.toString();
 }
 
+/** Собрать подписанный query параметров запуска VK (алгоритм из доки). */
+function buildVkLaunchParams(
+  secret: string,
+  params: Record<string, string>,
+): string {
+  const vkKeys = Object.keys(params)
+    .filter((k) => k.startsWith('vk_'))
+    .sort();
+  const dataCheck = vkKeys
+    .map((k) => k + '=' + encodeURIComponent(params[k]!).replace(/%20/g, '+'))
+    .join('&');
+  const sign = createHmac('sha256', secret)
+    .update(dataCheck)
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return (
+    Object.entries(params)
+      .map(([k, v]) => k + '=' + v)
+      .join('&') +
+    '&sign=' +
+    sign
+  );
+}
+
 describe('verifyTelegramInitData', () => {
   const token = '123456:ABC-DEF';
 
@@ -158,13 +184,19 @@ describe('Authenticator', () => {
 });
 
 describe('verifyVkLaunchParams', () => {
-  // Официальный пример из документации VK.
-  // @see https://dev.vk.com/ru/mini-apps/development/launch-params-sign
+  // Алгоритм: https://dev.vk.com/ru/mini-apps/development/launch-params-sign
   const secret = 'wvl68m4dR1UpLrVRli';
-  const query =
-    'vk_user_id=494075&vk_app_id=6736218&vk_is_app_user=1&vk_are_notifications_enabled=1&vk_language=ru&vk_access_token_settings=&vk_platform=android&sign=exTIBPYTrAKDTHLLm2AwJkmcVcvFCzQUNyoa6wAjvW6k';
+  const query = buildVkLaunchParams(secret, {
+    vk_user_id: '494075',
+    vk_app_id: '6736218',
+    vk_is_app_user: '1',
+    vk_are_notifications_enabled: '1',
+    vk_language: 'ru',
+    vk_access_token_settings: '',
+    vk_platform: 'android',
+  });
 
-  it('принимает официальный тест-вектор VK', () => {
+  it('принимает валидную подпись VK', () => {
     const r = verifyVkLaunchParams(query, secret);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.userId).toBe('494075');
@@ -224,32 +256,16 @@ describe('verifyOkLaunchParams', () => {
       vkAppSecret: secret,
       okAppSecret: secret,
     });
-    const vkParams: Record<string, string> = {
+    const vkProof = buildVkLaunchParams(secret, {
       vk_user_id: '99',
       vk_app_id: '1',
       vk_platform: 'web',
-    };
-    const dataCheck = Object.keys(vkParams)
-      .sort()
-      .map((k) => k + '=' + encodeURIComponent(vkParams[k]!).replace(/%20/g, '+'))
-      .join('&');
-    const sign = createHmac('sha256', secret)
-      .update(dataCheck)
-      .digest('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-    const vkProof =
-      Object.entries(vkParams)
-        .map(([k, v]) => k + '=' + v)
-        .join('&') +
-      '&sign=' +
-      sign;
+    });
     const vk = auth.authenticate({ provider: 'vk', name: 'Игрок', proof: vkProof });
-    const ok = auth.authenticate({ provider: 'ok', name: 'Игрок', proof: query });
+    const okRes = auth.authenticate({ provider: 'ok', name: 'Игрок', proof: query });
     expect(vk.ok).toBe(true);
-    expect(ok.ok).toBe(true);
-    expect(vk.account!.id).not.toBe(ok.account!.id);
+    expect(okRes.ok).toBe(true);
+    expect(vk.account!.id).not.toBe(okRes.account!.id);
     store.dispose();
   });
 });
