@@ -1,1 +1,12 @@
-Place icon-192.png and icon-512.png here for PWA install prompts.
+# Иконки PWA
+
+В репозитории:
+- `icon-192.svg` / `icon-512.svg` — векторная заглушка «Б» (уже подключена в `manifest.json`).
+- `icon-192.png` / `icon-512.png` — для магазинов площадок; сгенерируйте локально:
+
+```bash
+# из корня репозитория, нужен Pillow
+python3 -c "from PIL import Image, ImageDraw, ImageFont; ..."
+```
+
+Или экспортируйте финальный дизайн 192×192 и 512×512 в эту папку.
