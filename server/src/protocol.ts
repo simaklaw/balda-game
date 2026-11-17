@@ -34,7 +34,19 @@ export interface PlayerProfile {
   wins: number;
 }
 
+/** Провайдеры входа (зеркало server/src/accounts). */
+export type AuthProvider = 'vk' | 'ok' | 'telegram' | 'yandex' | 'guest';
+
 export type ClientMessage =
+  | {
+      type: 'auth';
+      provider: AuthProvider;
+      externalId?: string;
+      proof?: string;
+      accountId?: string;
+      secret?: string;
+      name: string;
+    }
   | { type: 'quick-match'; name: string }
   | { type: 'create-room'; name: string }
   | { type: 'join-room'; name: string; roomId: string }
@@ -42,7 +54,7 @@ export type ClientMessage =
   | { type: 'pass' }
   | { type: 'reconnect'; roomId: string; playerId: string; token: string }
   | { type: 'leave' }
-  | { type: 'profile'; name: string };
+  | { type: 'profile'; name?: string };
 
 export type ServerMessage =
   | {
@@ -63,9 +75,19 @@ export type ServerMessage =
       deltaRating: number[];
       deltaChips: number[];
     }
-  | { type: 'profile'; name: string; profile: PlayerProfile | null };
+  | { type: 'profile'; name: string; profile: PlayerProfile | null }
+  | {
+      type: 'auth-ok';
+      accountId: string;
+      /** Только при создании TOFU-аккаунта. */
+      secret?: string;
+      name: string;
+      profile: PlayerProfile;
+    }
+  | { type: 'auth-failed'; message: string };
 
 const CLIENT_TYPES: ReadonlySet<string> = new Set([
+  'auth',
   'quick-match',
   'create-room',
   'join-room',
@@ -74,6 +96,14 @@ const CLIENT_TYPES: ReadonlySet<string> = new Set([
   'reconnect',
   'leave',
   'profile',
+]);
+
+const AUTH_PROVIDERS: ReadonlySet<string> = new Set([
+  'vk',
+  'ok',
+  'telegram',
+  'yandex',
+  'guest',
 ]);
 
 const MAX_BOARD = 7;
@@ -118,6 +148,31 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (!isStr(type) || !CLIENT_TYPES.has(type)) return null;
 
   switch (type) {
+    case 'auth': {
+      if (!isStr(data.provider) || !AUTH_PROVIDERS.has(data.provider)) return null;
+      if (!isName(data.name)) return null;
+      if (data.externalId !== undefined && !(isStr(data.externalId) && data.externalId.length <= 64)) {
+        return null;
+      }
+      if (data.proof !== undefined && !(isStr(data.proof) && data.proof.length <= 4096)) {
+        return null;
+      }
+      if (data.accountId !== undefined && !(isStr(data.accountId) && data.accountId.length <= 64)) {
+        return null;
+      }
+      if (data.secret !== undefined && !(isStr(data.secret) && data.secret.length <= 128)) {
+        return null;
+      }
+      return {
+        type: 'auth',
+        provider: data.provider as AuthProvider,
+        externalId: data.externalId as string | undefined,
+        proof: data.proof as string | undefined,
+        accountId: data.accountId as string | undefined,
+        secret: data.secret as string | undefined,
+        name: data.name,
+      };
+    }
     case 'quick-match':
     case 'create-room':
       return isName(data.name) ? { type, name: data.name } : null;
@@ -138,6 +193,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'leave':
       return { type: 'leave' };
     case 'profile':
+      // name опционален: без имени — свой профиль (после auth).
+      if (data.name === undefined) return { type: 'profile' };
       return isName(data.name) ? { type: 'profile', name: data.name } : null;
     default:
       return null;
