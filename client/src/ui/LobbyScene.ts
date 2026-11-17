@@ -186,10 +186,28 @@ export class LobbyScene {
     return net;
   }
 
+  /** Guest-вход перед матчем (сервер требует auth). */
+  private async ensureAuth(net: NetClient): Promise<boolean> {
+    this.setStatus('Вход…');
+    const result = await net.authenticate({
+      provider: 'guest',
+      name: this.playerName,
+    });
+    if (!result.ok) {
+      this.setStatus(result.message);
+      return false;
+    }
+    return true;
+  }
+
   private async quickMatch(): Promise<void> {
     this.setButtonsEnabled(false);
     const net = await this.ensureConnected();
     if (net === null) {
+      this.setButtonsEnabled(true);
+      return;
+    }
+    if (!(await this.ensureAuth(net))) {
       this.setButtonsEnabled(true);
       return;
     }
@@ -202,6 +220,10 @@ export class LobbyScene {
     this.setButtonsEnabled(false);
     const net = await this.ensureConnected();
     if (net === null) {
+      this.setButtonsEnabled(true);
+      return;
+    }
+    if (!(await this.ensureAuth(net))) {
       this.setButtonsEnabled(true);
       return;
     }
@@ -233,6 +255,12 @@ export class LobbyScene {
       const resolve = this.profileResolve;
       this.profileResolve = null;
       resolve?.(msg.profile);
+      return;
+    }
+    if (msg.type === 'auth-failed') {
+      this.joining = false;
+      this.setButtonsEnabled(true);
+      this.setStatus(String(msg.message));
       return;
     }
     if (msg.type === 'error') {
@@ -275,6 +303,7 @@ export class LobbyScene {
         clearTimeout(timer);
         resolve(value);
       };
+      net.send({ type: 'profile', name: this.playerName });
     });
     this.profileResolve = null;
     this.setButtonsEnabled(true);
@@ -416,6 +445,10 @@ export class LobbyScene {
     this.setButtonsEnabled(false);
     const net = await this.ensureConnected();
     if (net === null) {
+      this.setButtonsEnabled(true);
+      return;
+    }
+    if (!(await this.ensureAuth(net))) {
       this.setButtonsEnabled(true);
       return;
     }
