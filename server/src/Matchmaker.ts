@@ -2,6 +2,7 @@ import type { Dawg, GameConfig } from '@balda/shared';
 import { Room } from './Room';
 import type { PlayerConnection, RoomOptions } from './Room';
 import type { PlayerRecord, PlayerStore } from './PlayerStore';
+import type { AccountStore } from './accounts';
 
 /** Код комнаты: только буквы без путаницы (ввод с canvas-клавиатуры). */
 const ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -17,6 +18,10 @@ export interface MatchmakerOptions {
   reconnectMs?: number;
   /** Постоянное хранилище профилей; без него рейтинг живёт в памяти. */
   players?: PlayerStore;
+  /** Аккаунты площадок — источник рейтинга после фазы E. */
+  accounts?: AccountStore;
+  /** playerId слота → accountId (заполняет index.ts при join). */
+  accountIdFor?: (playerId: string) => string | undefined;
   /**
    * Максимум одновременных комнат (защита памяти от ботов).
    * Не задан — лимита нет (в тестах); index.ts передаёт env MAX_ROOMS.
@@ -159,18 +164,32 @@ export class Matchmaker {
     const outcome = room.lastOutcome;
     if (outcome === null) return;
     const names = room.names;
+    const ids = room.playerIds;
     const winner = room.winnerIndex;
     const store = this.options.players;
+    const accounts = this.options.accounts;
+    const accountIdFor = this.options.accountIdFor;
+
     if (store !== undefined) {
       for (let i = 0; i < names.length && i < outcome.newRatings.length; i++) {
         const name = names[i]!;
         if (name !== '') store.applyResult(name, outcome.newRatings[i]!, winner === i);
       }
-      return;
+    } else {
+      for (let i = 0; i < names.length && i < outcome.newRatings.length; i++) {
+        const name = names[i]!;
+        if (name !== '') this.ratings.set(nameKey(name), outcome.newRatings[i]!);
+      }
     }
-    for (let i = 0; i < names.length && i < outcome.newRatings.length; i++) {
-      const name = names[i]!;
-      if (name !== '') this.ratings.set(nameKey(name), outcome.newRatings[i]!);
+
+    if (accounts !== undefined && accountIdFor !== undefined) {
+      for (let i = 0; i < ids.length && i < outcome.newRatings.length; i++) {
+        const pid = ids[i]!;
+        if (pid === '') continue;
+        const accountId = accountIdFor(pid);
+        if (accountId === undefined) continue;
+        accounts.applyResult(accountId, outcome.newRatings[i]!, winner === i);
+      }
     }
   }
 
