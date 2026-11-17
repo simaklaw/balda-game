@@ -163,6 +163,11 @@ export class Room {
     return this.slots.map((s) => s?.name ?? '');
   }
 
+  /** Id слотов (пустая строка — слот свободен). */
+  get playerIds(): string[] {
+    return this.slots.map((s) => s?.id ?? '');
+  }
+
   /** Посадить игрока в свободный слот. Бросает, если комната заполнена. */
   addPlayer(
     conn: PlayerConnection,
@@ -313,8 +318,6 @@ export class Room {
         connected: s !== null && s.conn !== null,
       })),
       currentPlayer: this.game.currentPlayer,
-      // Завершённая партия остаётся 'finished' даже после выхода игрока;
-      // 'waiting' — только для ещё не начавшейся комнаты.
       status: !this.isFull && !this.isFinished ? 'waiting' : this.game.status,
       history: [...this.game.history],
       winner: this.game.winner,
@@ -354,11 +357,9 @@ export class Room {
     if (this.playerCount === 0) this.onEmpty?.(this);
   }
 
-  /** Пересчёт Эло и фишек по факту завершения партии. */
   private computeOutcome(): RoomOutcome {
     const [r0, r1] = this.ratings;
     const winner = this.game.winner;
-    // Ничья: рейтинг и фишки не меняются (явный контракт протокола).
     if (winner === null) {
       return {
         newRatings: [r0, r1],
