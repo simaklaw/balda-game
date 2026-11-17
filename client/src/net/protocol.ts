@@ -122,6 +122,16 @@ function isNumArray(v: unknown, len: number): v is number[] {
   return Array.isArray(v) && v.length === len && v.every(isNum);
 }
 
+function isPlayerProfile(v: unknown): v is PlayerProfile {
+  return (
+    isObj(v) &&
+    isNum(v.rating) &&
+    isNum(v.chips) &&
+    isNum(v.games) &&
+    isNum(v.wins)
+  );
+}
+
 /**
  * Разбор сообщения сервера.
  * Проверяет type и структуру state / scores — битое сообщение не уронит сцену.
@@ -174,16 +184,20 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         : null;
     case 'profile':
       return isStr(data.name)
-        ? { type: 'profile', name: data.name, profile: (data.profile as PlayerProfile | null) ?? null }
+        ? {
+            type: 'profile',
+            name: data.name,
+            profile: isPlayerProfile(data.profile) ? data.profile : null,
+          }
         : null;
     case 'auth-ok':
-      return isStr(data.accountId) && isStr(data.name) && isObj(data.profile)
+      return isStr(data.accountId) && isStr(data.name) && isPlayerProfile(data.profile)
         ? {
             type: 'auth-ok',
             accountId: data.accountId,
             secret: isStr(data.secret) ? data.secret : undefined,
             name: data.name,
-            profile: data.profile as PlayerProfile,
+            profile: data.profile,
           }
         : null;
     case 'auth-failed':
