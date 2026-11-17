@@ -11,6 +11,7 @@ import { HudView } from './HudView';
 import { computeGameLayout, keyboardMetricsFor } from './layout';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
+import { shouldReduceMotion } from '../perf';
 import { FONT_FAMILY, palette } from '../theme';
 
 export interface OnlineGameSceneCallbacks {
@@ -144,6 +145,7 @@ export class OnlineGameScene {
     });
     this.timerText.anchor.set(0.5, 0);
     this.view.addChild(this.timerText);
+this.timerText);
 
     this.wordPreview = new Text({
       text: '',
@@ -277,7 +279,7 @@ export class OnlineGameScene {
     return this.state.status === 'playing' && this.state.currentPlayer === this.state.you;
   }
 
-  private onPointerDown(e: { global: { x: number; y: number } }): void {
+  private onPointerDown(e: { global: { x: number; y: number }>): void {
     if (this.gameOverShown || !this.isMyTurn) return;
     this.dragActive = true;
     const cell = this.hitCell(e.global.x, e.global.y);
@@ -400,6 +402,11 @@ export class OnlineGameScene {
 
   private tickPop(): void {
     if (this.popCell === null) return;
+    if (shouldReduceMotion()) {
+      this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
+      this.popCell = null;
+      return;
+    }
     const t = (performance.now() - this.popStart) / POP_MS;
     if (t >= 1) {
       this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
@@ -457,6 +464,7 @@ export class OnlineGameScene {
   }
 
   private triggerShake(): void {
+    if (shouldReduceMotion()) return;
     this.shakeUntil = performance.now() + SHAKE_MS;
     if (!this.shakeActive) {
       this.shakeActive = true;
