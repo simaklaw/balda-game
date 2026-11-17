@@ -2,7 +2,7 @@
 /**
  * Сквозной smoke-тест: сервер должен не просто собираться, а играть.
  * Поднимается снаружи (CI или `npm run start --workspace server`).
- * Сценарий: матч → старт → отказ мусорного/невалидного хода →
+ * Сценарий: auth → матч → старт → отказ мусорного/невалидного хода →
  * metrics (move_rejected) → pass → профиль → reconnect-отказ →
  * повторный quick-match в партии → /metrics. Код выхода 0/1.
  */
@@ -85,6 +85,22 @@ async function main() {
     process.exit(1);
   }
 
+  // 0. Auth guest (E1): без входа quick-match запрещён.
+  a.send({ type: 'quick-match', name: 'SmokeA' });
+  const needAuth = await a.expect('error без auth', (m) => m.type === 'error');
+  if (needAuth !== null) ok('без auth quick-match отклонён');
+  a.drain();
+
+  a.send({ type: 'auth', provider: 'guest', name: 'SmokeA' });
+  const authA = await a.expect('auth-ok A', (m) => m.type === 'auth-ok');
+  if (authA !== null && authA.accountId) ok('guest auth A: ' + authA.accountId.slice(0, 8));
+  else fail('guest auth A не прошёл');
+
+  b.send({ type: 'auth', provider: 'guest', name: 'SmokeB' });
+  const authB = await b.expect('auth-ok B', (m) => m.type === 'auth-ok');
+  if (authB !== null && authB.accountId) ok('guest auth B: ' + authB.accountId.slice(0, 8));
+  else fail('guest auth B не прошёл');
+
   // 1. Первый игрок встаёт в очередь и ждёт.
   a.send({ type: 'quick-match', name: 'SmokeA' });
   const joinedA = await a.expect('joined (A)', isJoined);
@@ -165,8 +181,7 @@ async function main() {
   );
   if (err3 !== null) ok('фейк-reconnect отклонён: ' + err3.message);
 
-  // 9. Повторный quick-match в начавшейся партии: сессия уходит из старой комнаты
-  // (техпоражение соперника) и получает новый joined — не зависает.
+  // 9. Повторный quick-match в начавшейся партии.
   a.drain();
   b.drain();
   a.send({ type: 'quick-match', name: 'SmokeA2' });
@@ -176,7 +191,6 @@ async function main() {
   } else {
     fail('повторный quick-match не вернул joined');
   }
-  // Соперник B должен получить game-over (техпоражение ушедшего A).
   const overB = await b.expect('game-over у B после ухода A', isGameOver, 3000);
   if (overB !== null) {
     ok('B получил game-over после ухода A (winner=' + overB.winner + ')');
