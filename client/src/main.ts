@@ -179,18 +179,24 @@ async function bootstrap(): Promise<void> {
 
   const showLobby = (): void => {
     setScene(
-      new LobbyScene(app, playerName, adapter.storage, {
-        onBack: showMenu,
-        onGameStarted: (net, state) =>
-          setScene(
-            new OnlineGameScene(app, net, state, {
-              onMenu: () => {
-                net.close();
-                showMenu();
-              },
-            }),
-          ),
-      }),
+      new LobbyScene(
+        app,
+        playerName,
+        adapter.storage,
+        {
+          onBack: showMenu,
+          onGameStarted: (net, state) =>
+            setScene(
+              new OnlineGameScene(app, net, state, {
+                onMenu: () => {
+                  net.close();
+                  showMenu();
+                },
+              }),
+            ),
+        },
+        adapter.id,
+      ),
     );
   };
 
