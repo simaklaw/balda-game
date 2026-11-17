@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { Account, AccountStore, Provider } from './accounts';
 import { isProvider, sanitizeDisplayName } from './accounts';
 
@@ -49,7 +49,9 @@ export class Authenticator {
       case 'telegram':
         return this.authTelegram(req, name);
       case 'vk':
+        return this.authVk(req, name);
       case 'ok':
+        return this.authOk(req, name);
       case 'yandex':
         return { ok: false, error: 'Провайдер пока не подключён' };
       default:
@@ -143,6 +145,85 @@ export class Authenticator {
       };
     }
   }
+
+  /**
+   * VK Mini Apps launch params.
+   * @see https://dev.vk.com/ru/mini-apps/development/launch-params-sign
+   */
+  private authVk(req: AuthRequest, name: string): AuthResult {
+    const appSecret = this.env.vkAppSecret;
+    if (appSecret === undefined || appSecret.length === 0) {
+      return { ok: false, error: 'VK-вход выключен' };
+    }
+    const proof = req.proof;
+    if (typeof proof !== 'string' || proof.length === 0 || proof.length > 4096) {
+      return { ok: false, error: 'Нет данных VK' };
+    }
+    const verified = verifyVkLaunchParams(proof, appSecret);
+    if (!verified.ok) {
+      return { ok: false, error: verified.error };
+    }
+    const displayName = name !== 'Игрок' ? name : 'VK';
+    try {
+      const existing = this.store.findByExternal('vk', verified.userId);
+      if (existing !== null) {
+        if (existing.banned) return { ok: false, error: 'Аккаунт заблокирован' };
+        this.store.rename(existing.id, displayName);
+        this.store.touch(existing.id);
+        return { ok: true, account: existing };
+      }
+      const { account } = this.store.create('vk', verified.userId, displayName, {
+        rated: true,
+        withSecret: false,
+      });
+      return { ok: true, account };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Не удалось создать аккаунт',
+      };
+    }
+  }
+
+  /**
+   * OK Games launch params.
+   * Алгоритм auth_sig (НЕ копировать VK): MD5(logged_user_id + session_key + application_secret_key).
+   * @see https://apiok.ru/dev/app/ — параметр auth_sig
+   */
+  private authOk(req: AuthRequest, name: string): AuthResult {
+    const appSecret = this.env.okAppSecret;
+    if (appSecret === undefined || appSecret.length === 0) {
+      return { ok: false, error: 'OK-вход выключен' };
+    }
+    const proof = req.proof;
+    if (typeof proof !== 'string' || proof.length === 0 || proof.length > 4096) {
+      return { ok: false, error: 'Нет данных OK' };
+    }
+    const verified = verifyOkLaunchParams(proof, appSecret);
+    if (!verified.ok) {
+      return { ok: false, error: verified.error };
+    }
+    const displayName = name !== 'Игрок' ? name : 'OK';
+    try {
+      const existing = this.store.findByExternal('ok', verified.userId);
+      if (existing !== null) {
+        if (existing.banned) return { ok: false, error: 'Аккаунт заблокирован' };
+        this.store.rename(existing.id, displayName);
+        this.store.touch(existing.id);
+        return { ok: true, account: existing };
+      }
+      const { account } = this.store.create('ok', verified.userId, displayName, {
+        rated: true,
+        withSecret: false,
+      });
+      return { ok: true, account };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Не удалось создать аккаунт',
+      };
+    }
+  }
 }
 
 export interface TelegramUser {
@@ -154,12 +235,7 @@ export interface TelegramUser {
 
 /**
  * Проверка подписи Telegram WebApp initData.
- * 1) parse query-string, extract hash
- * 2) sort remaining key=value by key, join with \n
- * 3) secret = HMAC_SHA256(key="WebAppData", data=botToken)
- * 4) computed = hex(HMAC_SHA256(key=secret, data=data_check_string))
- * 5) timingSafeEqual(computed, hash)
- * 6) auth_date within 24h (5 min clock skew)
+ * @see https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
  */
 export function verifyTelegramInitData(
   initData: string,
@@ -195,7 +271,7 @@ export function verifyTelegramInitData(
 
   const authDateRaw = params.get('auth_date');
   if (authDateRaw === null) {
-    return { ok: false, error: 'Нет auth_date' };
+    return { ok: false, error: 'Некорректный auth_date' };
   }
   const authDate = Number(authDateRaw);
   if (!Number.isFinite(authDate)) {
@@ -236,4 +312,98 @@ export function verifyTelegramInitData(
       username: typeof u.username === 'string' ? u.username : undefined,
     },
   };
+}
+
+/**
+ * Проверка подписи параметров запуска VK.
+ * @see https://dev.vk.com/ru/mini-apps/development/launch-params-sign
+ */
+export function verifyVkLaunchParams(
+  query: string,
+  appSecret: string,
+): { ok: true; userId: string } | { ok: false; error: string } {
+  let params: URLSearchParams;
+  try {
+    const q = query.includes('?') ? query.slice(query.indexOf('?') + 1) : query;
+    params = new URLSearchParams(q);
+  } catch {
+    return { ok: false, error: 'Некорректные параметры VK' };
+  }
+  const sign = params.get('sign');
+  if (sign === null || sign.length === 0) {
+    return { ok: false, error: 'Нет sign' };
+  }
+
+  const vkPairs: [string, string][] = [];
+  for (const [key, value] of params.entries()) {
+    if (key.startsWith('vk_')) vkPairs.push([key, value]);
+  }
+  if (vkPairs.length === 0) {
+    return { ok: false, error: 'Нет vk_* параметров' };
+  }
+  vkPairs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+
+  const dataCheckString = vkPairs
+    .map(([k, v]) => k + '=' + encodeURIComponent(v).replace(/%20/g, '+'))
+    .join('&');
+
+  const digest = createHmac('sha256', appSecret).update(dataCheckString).digest();
+  const computed = digest
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const a = Buffer.from(computed, 'utf8');
+  const b = Buffer.from(sign, 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { ok: false, error: 'Подпись VK неверна' };
+  }
+
+  const userId = params.get('vk_user_id');
+  if (userId === null || userId.length === 0) {
+    return { ok: false, error: 'Нет vk_user_id' };
+  }
+  return { ok: true, userId };
+}
+
+/**
+ * Проверка auth_sig параметров запуска Одноклассников.
+ * Алгоритм (НЕ VK): auth_sig = md5(logged_user_id + session_key + application_secret_key).
+ * @see https://apiok.ru/dev/app/ — поле auth_sig
+ */
+export function verifyOkLaunchParams(
+  query: string,
+  appSecret: string,
+): { ok: true; userId: string } | { ok: false; error: string } {
+  let params: URLSearchParams;
+  try {
+    const q = query.includes('?') ? query.slice(query.indexOf('?') + 1) : query;
+    params = new URLSearchParams(q);
+  } catch {
+    return { ok: false, error: 'Некорректные параметры OK' };
+  }
+  const authSig = params.get('auth_sig');
+  const userId = params.get('logged_user_id');
+  const sessionKey = params.get('session_key');
+  if (authSig === null || authSig.length === 0) {
+    return { ok: false, error: 'Нет auth_sig' };
+  }
+  if (userId === null || userId.length === 0) {
+    return { ok: false, error: 'Нет logged_user_id' };
+  }
+  if (sessionKey === null) {
+    return { ok: false, error: 'Нет session_key' };
+  }
+
+  const computed = createHash('md5')
+    .update(userId + sessionKey + appSecret, 'utf8')
+    .digest('hex');
+
+  const a = Buffer.from(computed.toLowerCase(), 'utf8');
+  const b = Buffer.from(authSig.toLowerCase(), 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { ok: false, error: 'Подпись OK неверна' };
+  }
+  return { ok: true, userId };
 }
