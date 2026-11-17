@@ -1,10 +1,15 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AccountStore } from '../src/accounts';
-import { Authenticator, verifyTelegramInitData } from '../src/auth';
+import {
+  Authenticator,
+  verifyOkLaunchParams,
+  verifyTelegramInitData,
+  verifyVkLaunchParams,
+} from '../src/auth';
 
 function tmpStore(): AccountStore {
   const dir = mkdtempSync(join(tmpdir(), 'balda-auth-'));
@@ -148,6 +153,103 @@ describe('Authenticator', () => {
     const r = auth.authenticate({ provider: 'guest', name: '\u202Ehacked' });
     expect(r.ok).toBe(true);
     expect(r.account!.displayName.includes('\u202E')).toBe(false);
+    store.dispose();
+  });
+});
+
+describe('verifyVkLaunchParams', () => {
+  // Официальный пример из документации VK.
+  // @see https://dev.vk.com/ru/mini-apps/development/launch-params-sign
+  const secret = 'wvl68m4dR1UpLrVRli';
+  const query =
+    'vk_user_id=494075&vk_app_id=6736218&vk_is_app_user=1&vk_are_notifications_enabled=1&vk_language=ru&vk_access_token_settings=&vk_platform=android&sign=exTIBPYTrAKDTHLLm2AwJkmcVcvFCzQUNyoa6wAjvW6k';
+
+  it('принимает официальный тест-вектор VK', () => {
+    const r = verifyVkLaunchParams(query, secret);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.userId).toBe('494075');
+  });
+
+  it('отклоняет подделанный sign', () => {
+    const broken = query.replace(/sign=[^&]+/, 'sign=AAAA');
+    expect(verifyVkLaunchParams(broken, secret).ok).toBe(false);
+  });
+
+  it('отклоняет изменённое поле при том же sign', () => {
+    const broken = query.replace('vk_user_id=494075', 'vk_user_id=1');
+    expect(verifyVkLaunchParams(broken, secret).ok).toBe(false);
+  });
+
+  it('провайдер без секрета → отказ', () => {
+    const store = tmpStore();
+    const auth = new Authenticator(store, {});
+    const r = auth.authenticate({ provider: 'vk', name: 'X', proof: query });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/выключен/);
+    store.dispose();
+  });
+});
+
+describe('verifyOkLaunchParams', () => {
+  // @see https://apiok.ru/dev/app/ — auth_sig = md5(logged_user_id+session_key+secret)
+  const secret = 'ok-app-secret';
+  const userId = '123456';
+  const sessionKey = 'sess-abc';
+  const authSig = createHash('md5')
+    .update(userId + sessionKey + secret, 'utf8')
+    .digest('hex');
+  const query =
+    'logged_user_id=' +
+    userId +
+    '&session_key=' +
+    sessionKey +
+    '&auth_sig=' +
+    authSig +
+    '&application_key=pub';
+
+  it('принимает валидный auth_sig', () => {
+    const r = verifyOkLaunchParams(query, secret);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.userId).toBe(userId);
+  });
+
+  it('отклоняет подделанный auth_sig', () => {
+    const broken = query.replace(authSig, 'deadbeef');
+    expect(verifyOkLaunchParams(broken, secret).ok).toBe(false);
+  });
+
+  it('VK и OK с одним displayName → разные аккаунты', () => {
+    const store = tmpStore();
+    const auth = new Authenticator(store, {
+      vkAppSecret: secret,
+      okAppSecret: secret,
+    });
+    const vkParams: Record<string, string> = {
+      vk_user_id: '99',
+      vk_app_id: '1',
+      vk_platform: 'web',
+    };
+    const dataCheck = Object.keys(vkParams)
+      .sort()
+      .map((k) => k + '=' + encodeURIComponent(vkParams[k]!).replace(/%20/g, '+'))
+      .join('&');
+    const sign = createHmac('sha256', secret)
+      .update(dataCheck)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const vkProof =
+      Object.entries(vkParams)
+        .map(([k, v]) => k + '=' + v)
+        .join('&') +
+      '&sign=' +
+      sign;
+    const vk = auth.authenticate({ provider: 'vk', name: 'Игрок', proof: vkProof });
+    const ok = auth.authenticate({ provider: 'ok', name: 'Игрок', proof: query });
+    expect(vk.ok).toBe(true);
+    expect(ok.ok).toBe(true);
+    expect(vk.account!.id).not.toBe(ok.account!.id);
     store.dispose();
   });
 });
