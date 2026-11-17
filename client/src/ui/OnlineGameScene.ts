@@ -72,6 +72,7 @@ export class OnlineGameScene {
   private readonly btnCancel: Button;
   private readonly btnPass: Button;
   private readonly btnOk: Button;
+  private readonly btnResign: Button;
   private readonly keyboard: KeyboardView;
   private controlWidth: number;
   private opponentCell: CellPos | null = null;
@@ -86,6 +87,7 @@ export class OnlineGameScene {
   private shakeUntil = 0;
   private shakeActive = false;
   private gameOverShown = false;
+  private resignConfirm = false;
   private gameOverOverlay: Container | null = null;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -127,7 +129,7 @@ export class OnlineGameScene {
       boardSize: initialState.size,
       insets,
       keyboardHeight: keyboardMetricsFor(app.screen.width).height,
-      controlCount: 3,
+      controlCount: 4,
     });
 
     this.hud = new HudView(app.screen.width, { human: 'Вы', opponent: 'Соперник' });
@@ -175,7 +177,15 @@ export class OnlineGameScene {
       color: palette().accent,
       onTap: () => this.onSubmit(),
     });
-    this.view.addChild(this.btnCancel, this.btnPass, this.btnOk);
+    this.btnResign = new Button({
+      caption: 'Сдаться',
+      width: this.controlWidth,
+      height: controlHeight,
+      color: palette().panel,
+      fontSize: 15,
+      onTap: () => this.onResign(),
+    });
+    this.view.addChild(this.btnCancel, this.btnPass, this.btnOk, this.btnResign);
 
     this.keyboard = new KeyboardView(app.screen.width, (letter) => this.onLetter(letter));
     this.keyboard.visible = false;
@@ -204,7 +214,7 @@ export class OnlineGameScene {
       boardSize: this.state.size,
       insets,
       keyboardHeight: keyboardMetricsFor(width).height,
-      controlCount: 3,
+      controlCount: 4,
     });
     this.hud.layout(width);
     this.hud.position.set(0, layout.hudY);
@@ -212,6 +222,7 @@ export class OnlineGameScene {
     this.btnCancel.setWidth(layout.controlWidth);
     this.btnPass.setWidth(layout.controlWidth);
     this.btnOk.setWidth(layout.controlWidth);
+    this.btnResign.setWidth(layout.controlWidth);
     if (layout.cellSize !== this.boardCellSize) {
       this.boardCellSize = layout.cellSize;
       this.boardView.setCellSize(layout.cellSize);
@@ -226,6 +237,7 @@ export class OnlineGameScene {
     this.btnCancel.position.set(layout.controlX, layout.controlY);
     this.btnPass.position.set(layout.controlX + (layout.controlWidth + gap), layout.controlY);
     this.btnOk.position.set(layout.controlX + (layout.controlWidth + gap) * 2, layout.controlY);
+    this.btnResign.position.set(layout.controlX + (layout.controlWidth + gap) * 3, layout.controlY);
     this.keyboard.setWidth(layout.keyboardWidth, layout.keyboardRows);
     this.keyboard.position.set(layout.keyboardX, layout.keyboardY);
   }
@@ -284,6 +296,24 @@ export class OnlineGameScene {
     this.selection.reset();
     this.keyboard.visible = false;
     this.refresh();
+  }
+
+  /** Сдача: первый тап — подтверждение, второй — leave (resign на сервере). */
+  private onResign(): void {
+    if (this.gameOverShown) return;
+    if (!this.resignConfirm) {
+      this.resignConfirm = true;
+      this.btnResign.setCaption('Точно?');
+      setTimeout(() => {
+        if (this.destroyed) return;
+        this.resignConfirm = false;
+        this.btnResign.setCaption('Сдаться');
+      }, 3000);
+      return;
+    }
+    this.resignConfirm = false;
+    this.btnResign.setCaption('Сдаться');
+    this.net.send({ type: 'leave' });
   }
 
   private onPass(): void {
@@ -422,6 +452,7 @@ export class OnlineGameScene {
     this.btnOk.setEnabled(active && this.selection.canSubmit());
     this.btnPass.setEnabled(active);
     this.btnCancel.setEnabled(active);
+    this.btnResign.setEnabled(!this.gameOverShown);
     this.updateTimers();
   }
 
