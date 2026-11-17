@@ -2,7 +2,8 @@ import { Application, Container, Graphics, Text } from 'pixi.js';
 import { NetClient } from '../net/NetClient';
 import type { SessionStore } from '../net/NetClient';
 import { detectWsOverride, resolveWsUrl } from '../net/wsUrl';
-import type { PlayerProfile, RoomState, ServerMessage } from '../net/protocol';
+import type { AuthProvider, PlayerProfile, RoomState, ServerMessage } from '../net/protocol';
+import type { PlatformId } from '../platform/types';
 import { Button } from './Button';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
@@ -27,6 +28,7 @@ export class LobbyScene {
   private readonly callbacks: LobbySceneCallbacks;
   private readonly store: SessionStore | undefined;
   private readonly playerName: string;
+  private readonly platformId: PlatformId;
   private readonly title: Text;
   private readonly statusText: Text;
   private readonly btnQuick: Button;
@@ -42,11 +44,18 @@ export class LobbyScene {
   private profileResolve: ((profile: PlayerProfile | null) => void) | null = null;
   private destroyed = false;
 
-  constructor(app: Application, playerName: string, store: SessionStore | undefined, callbacks: LobbySceneCallbacks) {
+  constructor(
+    app: Application,
+    playerName: string,
+    store: SessionStore | undefined,
+    callbacks: LobbySceneCallbacks,
+    platformId: PlatformId = 'web',
+  ) {
     this.app = app;
     this.playerName = playerName;
     this.store = store;
     this.callbacks = callbacks;
+    this.platformId = platformId;
 
     this.title = new Text({
       text: 'ОНЛАЙН',
@@ -186,11 +195,17 @@ export class LobbyScene {
     return net;
   }
 
-  /** Guest-вход перед матчем (сервер требует auth). */
+  private authProvider(): AuthProvider {
+    // web → guest; yandex → TOFU; VK/TG пока guest до proof на клиенте
+    if (this.platformId === 'yandex') return 'yandex';
+    return 'guest';
+  }
+
+  /** Вход перед матчем (сервер требует auth). */
   private async ensureAuth(net: NetClient): Promise<boolean> {
     this.setStatus('Вход…');
     const result = await net.authenticate({
-      provider: 'guest',
+      provider: this.authProvider(),
       name: this.playerName,
     });
     if (!result.ok) {
