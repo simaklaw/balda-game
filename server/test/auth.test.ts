@@ -269,3 +269,58 @@ describe('verifyOkLaunchParams', () => {
     store.dispose();
   });
 });
+
+describe('Authenticator yandex TOFU', () => {
+  it('создание возвращает секрет; rated=false', () => {
+    const store = tmpStore();
+    const auth = new Authenticator(store, {});
+    const first = auth.authenticate({
+      provider: 'yandex',
+      name: 'YaPlayer',
+      externalId: 'ya-uid-1',
+    });
+    expect(first.ok).toBe(true);
+    expect(first.secret).toBeTruthy();
+    expect(first.account?.provider).toBe('yandex');
+    expect(first.account?.rated).toBe(false);
+    expect(first.account?.externalId).toBe('ya-uid-1');
+    store.dispose();
+  });
+
+  it('повторный вход с секретом → тот же аккаунт', () => {
+    const store = tmpStore();
+    const auth = new Authenticator(store, {});
+    const first = auth.authenticate({
+      provider: 'yandex',
+      name: 'A',
+      externalId: 'ya-uid-2',
+    });
+    const again = auth.authenticate({
+      provider: 'yandex',
+      name: 'B',
+      accountId: first.account!.id,
+      secret: first.secret,
+    });
+    expect(again.ok).toBe(true);
+    expect(again.account!.id).toBe(first.account!.id);
+    expect(again.secret).toBeUndefined();
+    store.dispose();
+  });
+
+  it('без externalId и без secret → отказ', () => {
+    const store = tmpStore();
+    const auth = new Authenticator(store, {});
+    const r = auth.authenticate({ provider: 'yandex', name: 'X' });
+    expect(r.ok).toBe(false);
+    store.dispose();
+  });
+
+  it('известный externalId без секрета → отказ (защита от угона)', () => {
+    const store = tmpStore();
+    const auth = new Authenticator(store, {});
+    auth.authenticate({ provider: 'yandex', name: 'A', externalId: 'ya-uid-3' });
+    const r = auth.authenticate({ provider: 'yandex', name: 'Hacker', externalId: 'ya-uid-3' });
+    expect(r.ok).toBe(false);
+    store.dispose();
+  });
+});
