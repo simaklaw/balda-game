@@ -18,6 +18,11 @@ if (!existsSync('client/dist/dict/words.txt')) {
   process.exit(1);
 }
 
+if (!existsSync('client/dist/LICENSES/Harrix-Russian-Nouns-MIT.txt')) {
+  console.error('В dist нет LICENSES/Harrix-Russian-Nouns-MIT.txt');
+  process.exit(1);
+}
+
 // Бюджеты размеров (фаза F ужесточит: precompress + gzip-бюджет).
 const wordsBytes = statSync('client/dist/dict/words.txt').size;
 if (wordsBytes > 1024 * 1024) {
