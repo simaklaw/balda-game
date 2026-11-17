@@ -84,10 +84,22 @@ function buildInWorker(words: string[]): Promise<LoadedDawg | null> {
   });
 }
 
+/** Опциональный довесок (Ожегов / неологизмы XXI в.) — сбой не блокирует старт. */
+async function loadExtraWords(): Promise<string[]> {
+  try {
+    const url = new URL('dict/words-extra.txt', document.baseURI).href;
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    return normalizeList((await response.text()).split('\n'));
+  } catch {
+    return [];
+  }
+}
+
 /**
- * Загрузка словаря: words.txt из public/ собирается в DAWG.
+ * Загрузка словаря: words.txt (+ words-extra.txt) → DAWG.
  * Тяжёлая сборка — в Worker; при отказе Worker — синхронно на main.
- * Если файл недоступен (юнит-тесты) — встроенный dev-набор.
+ * Если основной файл недоступен (юнит-тесты) — встроенный dev-набор.
  */
 export async function loadDawg(): Promise<LoadedDawg> {
   try {
@@ -98,8 +110,11 @@ export async function loadDawg(): Promise<LoadedDawg> {
     const response = await fetch(url);
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const text = await response.text();
-    const words = normalizeList(text.split('\n'));
-    if (words.length < 10000) throw new Error('Словарь подозрительно мал: ' + words.length);
+    const base = normalizeList(text.split('\n'));
+    if (base.length < 10000) throw new Error('Словарь подозрительно мал: ' + base.length);
+
+    const extra = await loadExtraWords();
+    const words = extra.length === 0 ? base : [...base, ...extra];
 
     const fromWorker = await buildInWorker(words);
     if (fromWorker !== null) return fromWorker;
