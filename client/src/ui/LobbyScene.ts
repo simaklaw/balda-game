@@ -195,9 +195,12 @@ export class LobbyScene {
     return net;
   }
 
+  /**
+   * Пока proof/externalId площадок не подключены на клиенте — всегда guest.
+   * platformId сохранён для следующего шага (VK/TG/Yandex proof).
+   */
   private authProvider(): AuthProvider {
-    // web → guest; yandex → TOFU; VK/TG пока guest до proof на клиенте
-    if (this.platformId === 'yandex') return 'yandex';
+    void this.platformId;
     return 'guest';
   }
 
@@ -302,7 +305,6 @@ export class LobbyScene {
     setTimeout(() => this.callbacks.onGameStarted(net, state), 0);
   }
 
-  /** Экран профиля: рейтинг, фишки, статистика партий. */
   private async showProfile(): Promise<void> {
     if (this.profileOverlay !== null) return;
     this.setButtonsEnabled(false);
@@ -398,7 +400,6 @@ export class LobbyScene {
     this.profileOverlay = null;
   }
 
-  /** Ввод кода комнаты на кастомной клавиатуре. */
   private showCodeEntry(): void {
     if (this.codeOverlay !== null) return;
     const width = this.app.screen.width;
