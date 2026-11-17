@@ -53,7 +53,7 @@ export class Authenticator {
       case 'ok':
         return this.authOk(req, name);
       case 'yandex':
-        return { ok: false, error: 'Провайдер пока не подключён' };
+        return this.authYandex(req, name);
       default:
         return { ok: false, error: 'Неизвестный провайдер' };
     }
@@ -217,6 +217,62 @@ export class Authenticator {
         withSecret: false,
       });
       return { ok: true, account };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Не удалось создать аккаунт',
+      };
+    }
+  }
+
+  /**
+   * Яндекс Игры — TOFU по uniqueID (как guest).
+   * client передаёт externalId = player.getUniqueID() (или getID()).
+   * Подпись player.signature (signed: true) требует ключ после инапов — пока не верифицируем.
+   * rated: false — не попадает в общий рейтинговый ладдер.
+   */
+  private authYandex(req: AuthRequest, name: string): AuthResult {
+    if (req.accountId !== undefined && req.secret !== undefined) {
+      const acc = this.store.findById(req.accountId);
+      if (acc === null || acc.provider !== 'yandex') {
+        return { ok: false, error: 'Аккаунт не найден' };
+      }
+      if (acc.banned) return { ok: false, error: 'Аккаунт заблокирован' };
+      if (!this.store.verifySecret(acc, req.secret)) {
+        return { ok: false, error: 'Неверный секрет' };
+      }
+      this.store.rename(acc.id, name);
+      this.store.touch(acc.id);
+      return { ok: true, account: acc };
+    }
+
+    const externalId =
+      typeof req.externalId === 'string' ? req.externalId.trim().slice(0, 64) : '';
+    if (externalId.length === 0) {
+      return { ok: false, error: 'Нет идентификатора Яндекс' };
+    }
+
+    try {
+      const existing = this.store.findByExternal('yandex', externalId);
+      if (existing !== null) {
+        if (existing.banned) return { ok: false, error: 'Аккаунт заблокирован' };
+        if (req.secret !== undefined && req.secret.length > 0) {
+          if (!this.store.verifySecret(existing, req.secret)) {
+            return { ok: false, error: 'Неверный секрет' };
+          }
+          this.store.rename(existing.id, name);
+          this.store.touch(existing.id);
+          return { ok: true, account: existing };
+        }
+        return { ok: false, error: 'Нужен секрет для повторного входа' };
+      }
+
+      const { account, secret } = this.store.create('yandex', externalId, name, {
+        rated: false,
+        withSecret: true,
+      });
+      if (account.banned) return { ok: false, error: 'Аккаунт заблокирован' };
+      return { ok: true, account, secret: secret ?? undefined };
     } catch (err) {
       return {
         ok: false,
