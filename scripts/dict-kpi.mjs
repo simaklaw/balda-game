@@ -2,7 +2,7 @@
 // Блокирующие метрики роняют скрипт; информирующие — только печатаются.
 // Морфокорректность (все слова получены правилом или allow-листом) проверяет python3 tools/dict/verify.py:
 // он пересобирает словарь из закоммиченных источников и сверяет sha256 побайтово.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 

@@ -15,7 +15,7 @@ export default tseslint.config(
   {
     // Node-скрипты (smoke и т.п.): глобалы Node недоступны TS-оверрайдам,
     // поэтому объявляем их явно.
-    files: ['scripts/**/*.mjs', 'eslint.config.js'],
+    files: ['scripts/**/*.mjs', 'tools/**/*.mjs', 'eslint.config.js'],
     languageOptions: {
       globals: {
         console: 'readonly',
