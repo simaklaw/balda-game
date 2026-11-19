@@ -12,7 +12,7 @@
 - [x] ИИ-соперник: перебор с эвристикой (easy / medium / hard)
 - [x] Юнит-тесты правил, словаря, игры и ИИ
 - [x] Источник словаря: Harrix/Russian-Nouns → `client/public/dict/words.txt`
-      (49 312 слов + words-extra; сверка с Зализняком — см. docs/DICTIONARY.md)
+      (67 291 слово, пайплайн `tools/dict/`; цифры — в `client/public/dict/MANIFEST.json`)
 - [x] Поражение по времени: `Game.declareTimeout`, EndReason 'timeout'
 
 ## Этап 2 — UI на PixiJS (client/)
@@ -53,7 +53,9 @@
 - [x] Клиент: NetClient.authenticate, Lobby ensureAuth (platformId)
 - [x] DAWG в Web Worker + fallback на main (таймаут 30 с)
 - [x] Онлайн: «Сдаться» с подтверждением
-- [x] Словарь: words-extra.txt — 734 неологизма (Шагалова, XXI в.)
+- [x] Словарь: воспроизводимый пайплайн (OpenCorpora + Harrix + Викисловарь), один words.txt, KPI в CI
+- [ ] Словарь: частотный список для coverage@5000/noise@20000 (лицензия), вычитка выборки 200 слов, сверка с Клавогонками/решателями
+- [ ] Словарь: общий `WORD_RE` в shared/, счётчики «достижимо при 3×3/5×5/7×7», слова длины 2 (нужен тест на ИИ), периодическая пересборка, краудсорсинг жалоб
 - [x] a11y: lang=ru, aria-live, sr-only, prefers-reduced-motion
 - [x] PWA: manifest.json; иконки 192/512 (заглушка «Б»)
 - [ ] Иконки финального дизайна; черновики на Яндекс / VK / Telegram

@@ -1,0 +1,24 @@
+Лицензия данных словаря (client/public/dict/words.txt и tools/dict/sources/*)
+=============================================================================
+
+Данные словаря распространяются на условиях Creative Commons Attribution-ShareAlike 4.0
+International (CC BY-SA 4.0): https://creativecommons.org/licenses/by-sa/4.0/legalcode
+Код игры — MIT (см. LICENSE). Лицензии кода и данных раздельные.
+
+Почему CC BY-SA. words.txt — производный объект от данных:
+  * OpenCorpora (https://opencorpora.org/) — CC BY-SA 3.0; условия CC BY-SA 3.0 допускают
+    распространение адаптации под более поздней версией той же лицензии (4.0);
+  * заголовки русского Викисловаря — CC BY-SA 4.0 (используются как «свидетель» существования слова);
+  * Harrix/Russian-Nouns — MIT (© Sergienko Anton), MIT-данные можно включать в CC BY-SA произведение;
+    текст лицензии — LICENSES/Harrix-Russian-Nouns-MIT.txt.
+
+Атрибуция (требование BY): «Словарь игры «Балда» построен на данных OpenCorpora (CC BY-SA),
+русского Викисловаря (CC BY-SA 4.0) и Harrix/Russian-Nouns (MIT, © Sergienko Anton).
+Список изменений — tools/dict/build.py, MANIFEST.json, tools/dict/blocklist.txt, allowlist.txt».
+Изменения: отбор существительных в начальной форме, исключение имён/аббревиатур/ненормативной лексики,
+ручная вычитка спорных слов.
+
+ВНИМАНИЕ владельцу: сюда нужно положить полный юридический текст CC BY-SA 4.0
+(https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt). В этой среде сеть закрыта,
+полный текст не загружен — по ссылке выше он доступен. Лицензию набора OpenCorpora на Kaggle
+(rtatman/opencorpora-russian) и условия OpenCorpora стоит перепроверить на сайтах первоисточников.
