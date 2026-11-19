@@ -84,20 +84,28 @@ function buildInWorker(words: string[]): Promise<LoadedDawg | null> {
   });
 }
 
-/** Опциональный довесок (Ожегов / неологизмы XXI в.) — сбой не блокирует старт. */
-async function loadExtraWords(): Promise<string[]> {
+/** Минимальный размер словаря, если MANIFEST.json недоступен. */
+const MIN_WORDS_FALLBACK = 10_000;
+
+/** Доля от counts.total манифеста, ниже которой файл считается усечённым. */
+const MIN_WORDS_RATIO = 0.9;
+
+/** Ожидаемое число слов из dict/MANIFEST.json (counts.total); null — манифест недоступен. */
+async function loadExpectedTotal(): Promise<number | null> {
   try {
-    const url = new URL('dict/words-extra.txt', document.baseURI).href;
+    const url = new URL('dict/MANIFEST.json', document.baseURI).href;
     const response = await fetch(url);
-    if (!response.ok) return [];
-    return normalizeList((await response.text()).split('\n'));
+    if (!response.ok) return null;
+    const manifest = (await response.json()) as { counts?: { total?: unknown } };
+    const total = manifest.counts?.total;
+    return typeof total === 'number' && total > 0 ? total : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
 /**
- * Загрузка словаря: words.txt (+ words-extra.txt) → DAWG.
+ * Загрузка словаря: единый words.txt (собирается скриптом tools/dict/build.py) → DAWG.
  * Тяжёлая сборка — в Worker; при отказе Worker — синхронно на main.
  * Если основной файл недоступен (юнит-тесты) — встроенный dev-набор.
  */
@@ -110,11 +118,11 @@ export async function loadDawg(): Promise<LoadedDawg> {
     const response = await fetch(url);
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const text = await response.text();
-    const base = normalizeList(text.split('\n'));
-    if (base.length < 10000) throw new Error('Словарь подозрительно мал: ' + base.length);
-
-    const extra = await loadExtraWords();
-    const words = extra.length === 0 ? base : [...base, ...extra];
+    const words = normalizeList(text.split('\n'));
+    // Порог привязан к манифесту: усечённый на ~10 % файл не должен считаться «полным».
+    const expected = await loadExpectedTotal();
+    const minWords = expected === null ? MIN_WORDS_FALLBACK : Math.floor(expected * MIN_WORDS_RATIO);
+    if (words.length < minWords) throw new Error('Словарь подозрительно мал: ' + words.length);
 
     const fromWorker = await buildInWorker(words);
     if (fromWorker !== null) return fromWorker;

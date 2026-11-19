@@ -5,6 +5,5 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build:dawg": "tsx scripts/build-dawg.ts"
   }
 }

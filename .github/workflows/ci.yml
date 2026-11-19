@@ -35,6 +35,24 @@ jobs:
       - name: Проверка dist (относительные пути, словарь, бюджеты)
         run: node scripts/check-dist.mjs
 
+  dictionary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Пайплайн использует только стандартную библиотеку Python (requirements.txt не нужен).
+      - name: Юнит-тесты пайплайна словаря
+        run: python3 -I -m unittest discover -s tools/dict -p 'test_*.py'
+      - name: Воспроизводимость (пересборка == закоммиченный words.txt)
+        run: python3 -I tools/dict/verify.py
+      - name: KPI словаря
+        run: node scripts/dict-kpi.mjs
+
   smoke:
     runs-on: ubuntu-latest
     steps:

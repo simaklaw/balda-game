@@ -14,11 +14,14 @@
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run build && node scripts/check-dist.mjs",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build && node scripts/check-dist.mjs && npm run dict:test && npm run dict:verify && npm run dict:kpi",
     "build": "npm run build --workspace client",
-    "build:dawg": "npm run build:dawg --workspace shared",
     "start:server": "npm run start --workspace server",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "dict:build": "python3 -I tools/dict/build.py",
+    "dict:verify": "python3 -I tools/dict/verify.py",
+    "dict:test": "python3 -I -m unittest discover -s tools/dict -p 'test_*.py'",
+    "dict:kpi": "node scripts/dict-kpi.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
