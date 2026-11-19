@@ -17,12 +17,12 @@
     "morphology": "не применялась (pymorphy3 недоступен); контур A не подключён"
   },
   "counts": {
-    "total": 49307,
-    "fromBase": 49304,
+    "total": 49310,
+    "fromBase": 49307,
     "fromAllowlist": 3,
     "rejected": {
-      "blocklist": 8
+      "blocklist": 5
     }
   },
-  "outputSha256": "7a679f0907cb6bb63025d36b74413185da333a4350199c3d0c2bb086f4537aea"
+  "outputSha256": "911fa2a4e6bb7b08666825a82df96167034465b0c8be480f8dcfa6af2f98e815"
 }
