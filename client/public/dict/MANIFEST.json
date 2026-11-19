@@ -1,28 +1,83 @@
 {
   "sources": [
     {
-      "name": "Harrix/Russian-Nouns (ODict/Ефремова)",
+      "name": "OpenCorpora (контур A: леммы + морфология)",
+      "license": "CC BY-SA 3.0 (по данным проекта OpenCorpora; лицензию набора на Kaggle проверить)",
+      "url": "https://opencorpora.org/",
+      "rawSha256": "02f58cf44b9cb1d3001f945836ced46dacf7630a9f3b79ddca6802001f36cc4b",
+      "committedExtract": "tools/dict/sources/oc-extract.tsv",
+      "sha256": "67f1e848452d2f63bc13dcc1b1492aaaf0fd5b129e2d615ee3afa40f24fac553"
+    },
+    {
+      "name": "Harrix/Russian-Nouns (кандидаты; основа — ODict/Ефремова)",
       "license": "MIT",
       "url": "https://github.com/Harrix/Russian-Nouns",
-      "file": "tools/dict/sources/harrix-base.txt",
-      "sha256": "8060776214cbba041d31172dfde0179b379c6094bc68c32b3dc1c4cd345034b2"
+      "file": "tools/dict/sources/harrix-russian_nouns.txt",
+      "sha256": "661949699919aa968dd0033f7bdd8abbe4db09d161b565f3f0181283fd0d0da7"
+    },
+    {
+      "name": "Русский Викисловарь — заголовки (свидетель существования)",
+      "license": "CC BY-SA 4.0",
+      "url": "https://github.com/EgorTatarnikov/rus_dict_wiktionary",
+      "rawSha256": "2bcd3b9ef9905c977c1dd3976e6d1b4eef13e19a5ed2b844bca599e3b96ce004",
+      "committedExtract": "tools/dict/sources/wikt-witness.txt",
+      "sha256": "4d364110f019f6c3c029800450684d4e6137cc5216a548d24f5ef5af6d8bfe4f"
+    },
+    {
+      "name": "Неологизмы (кандидаты, принимаются только при подтверждении OC/Викисловарём)",
+      "license": "факты (список слов)",
+      "file": "tools/dict/sources/extra-candidates.txt",
+      "sha256": "cf18e2b20fb9f924b6b640315e9905f957e071d1b81f29f917e811df83e21954"
     }
   ],
   "rules": {
     "minLen": 2,
     "maxLen": 15,
     "format": "^[а-яе]{2,15}$ после ё→е",
+    "pos": [
+      "NOUN"
+    ],
+    "case": "nomn",
+    "number": "sing|Pltm",
+    "exclude": [
+      "Name",
+      "Surn",
+      "Patr",
+      "Geox",
+      "Orgn",
+      "Trad",
+      "Abbr",
+      "Erro",
+      "Dist",
+      "Init"
+    ],
     "blocklist": "точные формы (tools/dict/blocklist.txt)",
-    "allowlist": "tools/dict/allowlist.txt",
-    "morphology": "не применялась (pymorphy3 недоступен); контур A не подключён"
+    "allowlist": "tools/dict/allowlist.txt (приоритет над блок-листом)",
+    "decisionOrder": "см. docstring tools/dict/build.py"
   },
   "counts": {
-    "total": 49310,
-    "fromBase": 49307,
-    "fromAllowlist": 3,
+    "total": 67291,
+    "accepted": {
+      "allowlist": 232,
+      "harrix+wikt": 8500,
+      "oc-lemma": 58533,
+      "variant-nom": 26
+    },
     "rejected": {
-      "blocklist": 5
+      "blocklist": 40,
+      "form-of": 457,
+      "not-noun-lemma": 128,
+      "proper-or-abbr": 143,
+      "unverified": 1486
     }
   },
-  "outputSha256": "911fa2a4e6bb7b08666825a82df96167034465b0c8be480f8dcfa6af2f98e815"
+  "inputSha256": {
+    "allowlist.txt": "a2cbfa4cdcdcf9283e9126c1d15e94f4315cf2423799f12e13668b714131baa1",
+    "blocklist.txt": "e8fdd77aeaba443eee50ca71c59e7070cc479828843e0f4b8a75b901c017b3e2",
+    "extra-candidates.txt": "cf18e2b20fb9f924b6b640315e9905f957e071d1b81f29f917e811df83e21954",
+    "harrix-russian_nouns.txt": "661949699919aa968dd0033f7bdd8abbe4db09d161b565f3f0181283fd0d0da7",
+    "oc-extract.tsv": "67f1e848452d2f63bc13dcc1b1492aaaf0fd5b129e2d615ee3afa40f24fac553",
+    "wikt-witness.txt": "4d364110f019f6c3c029800450684d4e6137cc5216a548d24f5ef5af6d8bfe4f"
+  },
+  "outputSha256": "2fada0429d147e24090b5e76dceae6842ce10d78235428726be8c2f729e2a795"
 }

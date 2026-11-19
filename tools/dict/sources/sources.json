@@ -1,0 +1,15 @@
+{
+  "opencorpora": {
+    "file": "dictionary.txt (Kaggle rtatman/opencorpora-russian, дамп OpenCorpora 2019)",
+    "license": "CC BY-SA 3.0 (по данным проекта OpenCorpora; лицензию набора на Kaggle проверить)",
+    "rawBytes": 282218054,
+    "rawSha256": "02f58cf44b9cb1d3001f945836ced46dacf7630a9f3b79ddca6802001f36cc4b",
+    "url": "https://opencorpora.org/"
+  },
+  "wiktionary-titles": {
+    "file": "russian_dictionary.txt (EgorTatarnikov/rus_dict_wiktionary: заголовки с русским разделом, дамп ruwiktionary 2026-02)",
+    "license": "CC BY-SA 4.0",
+    "rawSha256": "2bcd3b9ef9905c977c1dd3976e6d1b4eef13e19a5ed2b844bca599e3b96ce004",
+    "url": "https://github.com/EgorTatarnikov/rus_dict_wiktionary"
+  }
+}
