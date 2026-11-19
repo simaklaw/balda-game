@@ -145,7 +145,6 @@ export class OnlineGameScene {
     });
     this.timerText.anchor.set(0.5, 0);
     this.view.addChild(this.timerText);
-this.timerText);
 
     this.wordPreview = new Text({
       text: '',
@@ -279,7 +278,7 @@ this.timerText);
     return this.state.status === 'playing' && this.state.currentPlayer === this.state.you;
   }
 
-  private onPointerDown(e: { global: { x: number; y: number }>): void {
+  private onPointerDown(e: { global: { x: number; y: number } }): void {
     if (this.gameOverShown || !this.isMyTurn) return;
     this.dragActive = true;
     const cell = this.hitCell(e.global.x, e.global.y);
