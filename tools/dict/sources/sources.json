@@ -1,13 +1,13 @@
 {
   "opencorpora": {
     "file": "dictionary.txt (Kaggle rtatman/opencorpora-russian, дамп OpenCorpora 2019)",
-    "license": "CC BY-SA 3.0 (по данным проекта OpenCorpora; лицензию набора на Kaggle проверить)",
+    "license": "OpenCorpora указывает CC BY-SA без версии; карточка Kaggle конфликтует: поле 4.0, описание ссылается на 3.0; права загрузившего менять upstream-лицензию не подтверждены",
     "rawBytes": 282218054,
     "rawSha256": "02f58cf44b9cb1d3001f945836ced46dacf7630a9f3b79ddca6802001f36cc4b",
     "url": "https://opencorpora.org/"
   },
   "openrussian": {
-    "file": "nouns.csv (Badestrand/russian-dictionary; порядок строк = частотность)",
+    "file": "nouns.csv (Badestrand/russian-dictionary; порядок записей используется как эвристика, частотное поле не подтверждено)",
     "license": "CC BY-SA 4.0",
     "rawSha256": "c388f9e6dde51932832be8d7e9afdbe9f0acee72fcf70677f0fe25ea61293c84",
     "url": "https://github.com/Badestrand/russian-dictionary"

@@ -521,6 +521,7 @@
 мохна	unverified
 мошник	unverified
 моя	not-noun-lemma:GRND
+мразь	blocklist
 муаре	form-of:муар
 мудак	blocklist
 мусульман	form-of:мусульманин
@@ -584,6 +585,8 @@
 наше	form-of:наш
 небность	unverified
 неверующая	form-of:неверующий
+негр	blocklist
+негритянка	blocklist
 неделимое	form-of:неделимый
 недожим	unverified
 недоимочность	unverified
@@ -1011,6 +1014,7 @@
 поваренка	form-of:поваренок
 поварчонок	unverified
 повесничание	unverified
+погань	blocklist
 погона	form-of:погон
 под	proper-or-abbr:Abbr
 подалириус	unverified
@@ -1065,6 +1069,7 @@
 поднавесье	unverified
 поднебесная	form-of:поднебесный
 поднизывание	unverified
+подонок	blocklist
 подпалзывание	unverified
 подплясывание	unverified
 подпрягание	unverified
@@ -1706,6 +1711,7 @@
 тюлюлюкание	unverified
 тяпание	unverified
 убитая	form-of:убитый
+ублюдок	blocklist
 убогая	form-of:убогий
 увальность	unverified
 увальчик	unverified

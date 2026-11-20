@@ -2,7 +2,7 @@
   "sources": [
     {
       "name": "OpenCorpora (контур A: леммы + морфология)",
-      "license": "CC BY-SA 3.0 (по данным проекта OpenCorpora; лицензию набора на Kaggle проверить)",
+      "license": "OpenCorpora указывает CC BY-SA без версии; карточка Kaggle конфликтует: поле 4.0, описание ссылается на 3.0; права загрузившего менять upstream-лицензию не подтверждены",
       "url": "https://opencorpora.org/",
       "rawSha256": "02f58cf44b9cb1d3001f945836ced46dacf7630a9f3b79ddca6802001f36cc4b",
       "committedExtract": "tools/dict/sources/oc-extract.tsv",
@@ -64,15 +64,15 @@
     "decisionOrder": "см. docstring tools/dict/build.py"
   },
   "counts": {
-    "total": 67302,
+    "total": 67296,
     "accepted": {
       "allowlist": 243,
       "harrix+wikt": 8500,
-      "oc-lemma": 58533,
+      "oc-lemma": 58527,
       "variant-nom": 26
     },
     "rejected": {
-      "blocklist": 40,
+      "blocklist": 46,
       "form-of": 457,
       "not-noun-lemma": 128,
       "proper-or-abbr": 143,
@@ -81,12 +81,12 @@
   },
   "inputSha256": {
     "allowlist.txt": "06442382dc33ef891945d433299706135788e28e18cf4b1a986e075258fe7604",
-    "blocklist.txt": "e8fdd77aeaba443eee50ca71c59e7070cc479828843e0f4b8a75b901c017b3e2",
+    "blocklist.txt": "72c56799ac6313afee434e49d2f4e6e8317ebffcfd8f37249515c1bdb9efd5bf",
     "extra-candidates.txt": "cf18e2b20fb9f924b6b640315e9905f957e071d1b81f29f917e811df83e21954",
     "harrix-russian_nouns.txt": "661949699919aa968dd0033f7bdd8abbe4db09d161b565f3f0181283fd0d0da7",
     "oc-extract.tsv": "4590b7eda50c56b6c6990be5b88511c3aee11844093ee7117e63c25f88a459ae",
     "openrussian-nouns.tsv": "0accd7160435b83a587e6ddb634a359fd74e3bc7926b4987c9be8a68263f9efb",
     "wikt-witness.txt": "71a5456b264cf2c036e91e12b5809d2955a49a59d23349a8dd851d27ee71b2c8"
   },
-  "outputSha256": "cff3f23183984e3ffee761bf0f0b71e695e61dc07ee22ec00968effa7058aa7a"
+  "outputSha256": "5445c6e6c0773d148733d235b65ffeb67499dd9148536434d1eef958f22bc1c2"
 }

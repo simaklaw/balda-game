@@ -72,6 +72,10 @@ class BuiltDictionary(unittest.TestCase):
         bl = [w for w in build.read_list(HERE / "blocklist.txt") if w not in allow]
         self.assertEqual([w for w in bl if w in self.words], [])
 
+    def test_owner_exclusions_absent(self):
+        excluded = {"негр", "негритянка", "подонок", "погань", "мразь", "ублюдок"}
+        self.assertTrue(excluded.isdisjoint(self.words))
+
     def test_manifest_matches_file(self):
         self.assertEqual(self.manifest["outputSha256"], hashlib.sha256(WORDS_PATH.read_bytes()).hexdigest())
         self.assertEqual(self.manifest["counts"]["total"], len(self.words))
