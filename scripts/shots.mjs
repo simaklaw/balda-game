@@ -19,14 +19,14 @@ for (let y = 820; y > 450; y -= 10) {
 await page.waitForTimeout(1500);
 await page.screenshot({ path: 'shots/game-dark.png' });
 const flow = async (tag) => {
-  await page.mouse.click(195, 195); // «+» над центральной буквой
+  await page.touchscreen.tap(195, 195); // «+» над центральной буквой
   await page.waitForTimeout(600);
   await page.screenshot({ path: `shots/${tag}-keyboard.png` });
-  await page.mouse.click(110, 640); // клавиша
+  await page.touchscreen.tap(110, 640); // клавиша
   await page.waitForTimeout(600);
-  await page.mouse.click(195, 268); // буква под новой клеткой
+  await page.touchscreen.tap(195, 268); // буква под новой клеткой
   await page.waitForTimeout(300);
-  await page.mouse.click(195, 195);
+  await page.touchscreen.tap(195, 195);
   await page.waitForTimeout(600);
   await page.screenshot({ path: `shots/${tag}-path.png` });
 };
