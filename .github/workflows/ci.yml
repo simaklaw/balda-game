@@ -36,14 +36,16 @@ jobs:
         run: node scripts/check-dist.mjs
 
   audit:
-    # Отчёт по уязвимостям зависимостей: сначала собираем данные (не блокирует), решение о блокировке — после разбора.
+    # Production-зависимости: critical/high блокируют CI. Полный отчёт (с dev) — только информирует.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: npm audit (все зависимости и только production) — сводка
+      - name: Блокирующая проверка production-зависимостей (high и выше)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Сводка по всем зависимостям (не блокирует)
         continue-on-error: true
         run: |
           npm audit --json > /tmp/audit-all.json || true
