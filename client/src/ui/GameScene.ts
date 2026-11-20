@@ -197,6 +197,7 @@ export class GameScene {
     window.addEventListener('resize', this.onResize);
     document.addEventListener('visibilitychange', this.onVisibility);
 
+    (window as unknown as { __scene: GameScene }).__scene = this;
     this.timer.startTurn(0, performance.now());
     app.ticker.add(this.onTicker);
     this.refresh();
@@ -250,7 +251,6 @@ export class GameScene {
   }
 
   private onPointerDown(e: FederatedPointerEvent): void {
-    console.error('DBG pointerdown', e.global.x, e.global.y, this.controller.isHumanTurn, this.aiThinking, this.historyOpen);
     if (!this.controller.isHumanTurn || this.aiThinking || this.historyOpen) return;
     const local = this.boardView.toLocal(e.global);
     const cell = this.boardView.cellAt(local.x, local.y);

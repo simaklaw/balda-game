@@ -20,15 +20,14 @@ for (let y = 820; y > 450; y -= 10) {
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-dark.png` });
 const flow = async (tag) => {
-  await page.touchscreen.tap(195, 195); // «+» над центральной буквой
-  await page.waitForTimeout(600);
+  const call = (code) => page.evaluate(code);
+  await call(() => { const s = window.__scene; s.selection.tapCell(1, 2); s.keyboard.visible = s.selection.snapshot.phase === 'choosingLetter'; s.refresh(); });
+  await page.waitForTimeout(500);
   await page.screenshot({ path: `shots/${P}${tag}-keyboard.png` });
-  await page.touchscreen.tap(110, 640); // клавиша
-  await page.waitForTimeout(600);
-  await page.touchscreen.tap(195, 268); // буква под новой клеткой
-  await page.waitForTimeout(300);
-  await page.touchscreen.tap(195, 195);
-  await page.waitForTimeout(600);
+  await call(() => { const s = window.__scene; s.onLetter('к'); });
+  await page.waitForTimeout(400);
+  await call(() => { const s = window.__scene; s.selection.extendPath(2, 2); s.selection.extendPath(2, 1); s.refresh(); });
+  await page.waitForTimeout(500);
   await page.screenshot({ path: `shots/${P}${tag}-path.png` });
 };
 await flow('dark');
@@ -39,7 +38,7 @@ await page.screenshot({ path: `shots/${P}menu-light.png` });
 for (let y = 820; y > 450; y -= 10) {
   await page.mouse.click(195, y);
   await page.waitForTimeout(700);
-  if ((await hash()) !== (await (async () => before)())) { break; }
+  if ((await hash()) !== before) { break; }
 }
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-light.png` });
