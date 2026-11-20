@@ -13,3 +13,6 @@
 производный объект от данных под share-alike. MIT-данные (Harrix) в CC BY-SA произведение включать можно, обратное — нет.
 
 Защищённые словари-PDF (Ожегов–Шведова, Шагалова) источником данных не являются и в репозитории не хранятся.
+
+## OpenRussian
+Частотный порядок слов (tools/dict/sources/openrussian-nouns.tsv) получен из https://github.com/Badestrand/russian-dictionary (CC BY-SA 4.0, данные OpenRussian.org). Используется как прокси частотности и для генерации пулов стартовых слов (shared/src/startWords.ts); на приёмку слов в словарь не влияет.

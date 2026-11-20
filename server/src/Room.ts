@@ -1,4 +1,4 @@
-import { defaultConfigFor, Game } from '@balda/shared';
+import { defaultConfigFor, Game, pickStartWord, START_WORDS } from '@balda/shared';
 import type { Dawg, GameConfig, MoveErrorCode, MoveInput } from '@balda/shared';
 import { calcElo, kFactor, CHIPS_PER_WIN } from './elo';
 import type { RoomState, ServerMessage } from './protocol';
@@ -10,28 +10,7 @@ export const TURN_MS = 120_000;
 /** Рейтинг нового игрока по умолчанию. */
 export const DEFAULT_RATING = 1000;
 
-/**
- * Пулы стартовых слов по размеру поля (длина слова = размеру поля).
- * Случайный выбор освежает партии; инвариант длины покрыт тестом.
- */
-export const START_WORDS: Record<number, readonly string[]> = {
-  3: ['бал', 'кот', 'дом', 'сон', 'лес'],
-  5: ['слово', 'книга', 'порог', 'тропа'],
-  7: ['чемодан', 'молоток', 'столица'],
-};
-
-/** Случайное стартовое слово для поля size; для неизвестного размера — ошибка. */
-export function pickStartWord(size: number, rnd: () => number = Math.random): string {
-  const pool = START_WORDS[size];
-  if (pool === undefined || pool.length === 0) {
-    throw new Error('Нет стартовых слов для поля ' + size + '×' + size);
-  }
-  const word = pool[Math.floor(rnd() * pool.length)]!;
-  if (word.length !== size) {
-    throw new Error('Стартовое слово "' + word + '" не подходит для поля ' + size + '×' + size);
-  }
-  return word;
-}
+export { START_WORDS, pickStartWord };
 
 /** Тексты ошибок хода для игрока. */
 const ERROR_TEXT: Record<MoveErrorCode, string> = {

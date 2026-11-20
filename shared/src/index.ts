@@ -10,4 +10,5 @@ export * from './letters';
 export * from './moderation';
 export * from './retention';
 export * from './rules';
+export * from './startWords';
 export * from './types';

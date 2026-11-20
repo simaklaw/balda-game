@@ -6,7 +6,7 @@
       "url": "https://opencorpora.org/",
       "rawSha256": "02f58cf44b9cb1d3001f945836ced46dacf7630a9f3b79ddca6802001f36cc4b",
       "committedExtract": "tools/dict/sources/oc-extract.tsv",
-      "sha256": "67f1e848452d2f63bc13dcc1b1492aaaf0fd5b129e2d615ee3afa40f24fac553"
+      "sha256": "4590b7eda50c56b6c6990be5b88511c3aee11844093ee7117e63c25f88a459ae"
     },
     {
       "name": "Harrix/Russian-Nouns (кандидаты; основа — ODict/Ефремова)",
@@ -21,13 +21,21 @@
       "url": "https://github.com/EgorTatarnikov/rus_dict_wiktionary",
       "rawSha256": "2bcd3b9ef9905c977c1dd3976e6d1b4eef13e19a5ed2b844bca599e3b96ce004",
       "committedExtract": "tools/dict/sources/wikt-witness.txt",
-      "sha256": "4d364110f019f6c3c029800450684d4e6137cc5216a548d24f5ef5af6d8bfe4f"
+      "sha256": "71a5456b264cf2c036e91e12b5809d2955a49a59d23349a8dd851d27ee71b2c8"
     },
     {
       "name": "Неологизмы (кандидаты, принимаются только при подтверждении OC/Викисловарём)",
       "license": "факты (список слов)",
       "file": "tools/dict/sources/extra-candidates.txt",
       "sha256": "cf18e2b20fb9f924b6b640315e9905f957e071d1b81f29f917e811df83e21954"
+    },
+    {
+      "name": "OpenRussian (только частотный прокси: порядок строк; не источник приёмки слов)",
+      "license": "CC BY-SA 4.0",
+      "url": "https://github.com/Badestrand/russian-dictionary",
+      "rawSha256": "c388f9e6dde51932832be8d7e9afdbe9f0acee72fcf70677f0fe25ea61293c84",
+      "committedExtract": "tools/dict/sources/openrussian-nouns.tsv",
+      "sha256": "0accd7160435b83a587e6ddb634a359fd74e3bc7926b4987c9be8a68263f9efb"
     }
   ],
   "rules": {
@@ -56,9 +64,9 @@
     "decisionOrder": "см. docstring tools/dict/build.py"
   },
   "counts": {
-    "total": 67291,
+    "total": 67302,
     "accepted": {
-      "allowlist": 232,
+      "allowlist": 243,
       "harrix+wikt": 8500,
       "oc-lemma": 58533,
       "variant-nom": 26
@@ -72,12 +80,13 @@
     }
   },
   "inputSha256": {
-    "allowlist.txt": "a2cbfa4cdcdcf9283e9126c1d15e94f4315cf2423799f12e13668b714131baa1",
+    "allowlist.txt": "06442382dc33ef891945d433299706135788e28e18cf4b1a986e075258fe7604",
     "blocklist.txt": "e8fdd77aeaba443eee50ca71c59e7070cc479828843e0f4b8a75b901c017b3e2",
     "extra-candidates.txt": "cf18e2b20fb9f924b6b640315e9905f957e071d1b81f29f917e811df83e21954",
     "harrix-russian_nouns.txt": "661949699919aa968dd0033f7bdd8abbe4db09d161b565f3f0181283fd0d0da7",
-    "oc-extract.tsv": "67f1e848452d2f63bc13dcc1b1492aaaf0fd5b129e2d615ee3afa40f24fac553",
-    "wikt-witness.txt": "4d364110f019f6c3c029800450684d4e6137cc5216a548d24f5ef5af6d8bfe4f"
+    "oc-extract.tsv": "4590b7eda50c56b6c6990be5b88511c3aee11844093ee7117e63c25f88a459ae",
+    "openrussian-nouns.tsv": "0accd7160435b83a587e6ddb634a359fd74e3bc7926b4987c9be8a68263f9efb",
+    "wikt-witness.txt": "71a5456b264cf2c036e91e12b5809d2955a49a59d23349a8dd851d27ee71b2c8"
   },
-  "outputSha256": "2fada0429d147e24090b5e76dceae6842ce10d78235428726be8c2f729e2a795"
+  "outputSha256": "cff3f23183984e3ffee761bf0f0b71e695e61dc07ee22ec00968effa7058aa7a"
 }

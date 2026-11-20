@@ -1,11 +1,11 @@
 import { Application, Container, FederatedPointerEvent, Graphics, Text } from 'pixi.js';
 import type { CellPos, Dawg, Difficulty, MoveErrorCode } from '@balda/shared';
-import { defaultConfigFor } from '@balda/shared';
+import { defaultConfigFor, pickStartWord } from '@balda/shared';
 import { LocalGameController } from '../game/LocalGameController';
 import { SelectionModel } from '../game/SelectionModel';
 import { TIME_PRESETS, TimerModel } from '../game/TimerModel';
 import type { TimeControlKind } from '../game/TimerModel';
-import { lookupWord } from '../dict/definitions';
+import { showDefinitionOverlay } from './DefinitionOverlay';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
 import { gameOverText } from './gameOverText';
@@ -47,8 +47,6 @@ const ERROR_TEXT: Record<MoveErrorCode, string> = {
   NOT_PLAYERS_TURN: 'Сейчас не ваш ход',
   GAME_FINISHED: 'Партия окончена',
 };
-
-const INITIAL_WORDS: Record<3 | 5, string> = { 3: 'бал', 5: 'балда' };
 
 const AI_MOVE_DELAY_MS = 700;
 /** Сколько показывать ход бота (подсветка пути + слово в статусе). */
@@ -107,7 +105,7 @@ export class GameScene {
 
     // Минимальная длина слова зависит от размера поля (см. defaultConfigFor).
     const config = defaultConfigFor(options.boardSize);
-    this.controller = new LocalGameController(options.dawg, config, INITIAL_WORDS[options.boardSize], {
+    this.controller = new LocalGameController(options.dawg, config, pickStartWord(options.boardSize), {
       difficulty: options.difficulty,
     });
     this.selection = new SelectionModel(this.controller.game.board, config.minWordLength, false);
@@ -630,79 +628,7 @@ export class GameScene {
   /** Толкование слова из Викисловаря (по нажатию на ход в истории). */
   private showDefinition(word: string): void {
     if (this.destroyed || this.gameOverShown) return;
-    const insets = safeInsets();
-    const width = this.app.screen.width;
-    const height = this.app.screen.height;
-    const overlay = new Container();
-    overlay.eventMode = 'static';
-    overlay.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0.85 }));
-    const panelWidth = Math.min(360, width - 40);
-    const panelX = Math.floor((width - panelWidth) / 2);
-    const panelY = Math.max(48 + insets.top, Math.floor((height - 240) / 2));
-    const panel = new Graphics();
-    overlay.addChild(panel);
-    const title = new Text({
-      text: word.toUpperCase(),
-      style: { fontFamily: FONT_FAMILY, fontSize: 24, fill: palette().text },
-    });
-    title.anchor.set(0.5);
-    title.position.set(width / 2, panelY + 40);
-    overlay.addChild(title);
-    const body = new Text({
-      text: '',
-      style: {
-        fontFamily: FONT_FAMILY,
-        fontSize: 15,
-        fill: palette().text,
-        wordWrap: true,
-        wordWrapWidth: panelWidth - 40,
-        lineHeight: 21,
-      },
-    });
-    body.anchor.set(0.5, 0);
-    body.position.set(width / 2, panelY + 72);
-    overlay.addChild(body);
-    const source = new Text({
-      text: 'Источник: Викисловарь (CC BY-SA)',
-      style: { fontFamily: FONT_FAMILY, fontSize: 11, fill: palette().textDim },
-    });
-    source.anchor.set(0.5);
-    overlay.addChild(source);
-    const btnClose = new Button({
-      caption: 'Закрыть',
-      width: panelWidth - 30,
-      height: 44,
-      color: palette().panel,
-      onTap: () => {
-        this.view.removeChild(overlay);
-        overlay.destroy({ children: true });
-      },
-    });
-    overlay.addChild(btnClose);
-    this.view.addChild(overlay);
-
-    const maxPanelHeight = height - insets.top - 96;
-    const render = (text: string): void => {
-      if (body.destroyed) return;
-      body.text = text;
-      const need = Math.min(Math.max(240, 72 + Math.ceil(body.height) + 76), maxPanelHeight);
-      panel.clear();
-      panel
-        .roundRect(panelX, panelY, panelWidth, need, 16)
-        .fill({ color: palette().panel })
-        .stroke({ width: 2, color: palette().panelBorder });
-      source.position.set(width / 2, panelY + need - 70);
-      btnClose.position.set(panelX + 15, panelY + need - 52);
-    };
-    render('Ищем в Викисловаре…');
-    void lookupWord(word).then((definition) => {
-      if (body.destroyed) return;
-      if (definition === null) {
-        render('Определение не найдено.\nВозможно, слова нет в Викисловаре или нет подключения к сети.');
-        return;
-      }
-      render(definition.definitions.map((item, index) => index + 1 + '. ' + item).join('\n'));
-    });
+    showDefinitionOverlay(this.app, this.view, word);
   }
 
   private showGameOver(): void {

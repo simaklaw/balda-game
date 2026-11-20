@@ -107,7 +107,7 @@ def build():
     out = ("\n".join(sorted(words)) + "\n").encode("utf-8")
     meta = json.loads((SRC / "sources.json").read_text(encoding="utf-8"))
     files = {n: sha((SRC / n).read_bytes()) for n in
-             ("oc-extract.tsv", "wikt-witness.txt", "harrix-russian_nouns.txt", "extra-candidates.txt")}
+             ("oc-extract.tsv", "wikt-witness.txt", "harrix-russian_nouns.txt", "extra-candidates.txt", "openrussian-nouns.tsv")}
     files.update({"blocklist.txt": sha((HERE / "blocklist.txt").read_bytes()),
                   "allowlist.txt": sha((HERE / "allowlist.txt").read_bytes())})
     manifest = {
@@ -123,6 +123,9 @@ def build():
              "committedExtract": "tools/dict/sources/wikt-witness.txt", "sha256": files["wikt-witness.txt"]},
             {"name": "Неологизмы (кандидаты, принимаются только при подтверждении OC/Викисловарём)", "license": "факты (список слов)",
              "file": "tools/dict/sources/extra-candidates.txt", "sha256": files["extra-candidates.txt"]},
+            {"name": "OpenRussian (только частотный прокси: порядок строк; не источник приёмки слов)", "license": meta["openrussian"]["license"],
+             "url": meta["openrussian"]["url"], "rawSha256": meta["openrussian"]["rawSha256"],
+             "committedExtract": "tools/dict/sources/openrussian-nouns.tsv", "sha256": files["openrussian-nouns.tsv"]},
         ],
         "rules": {"minLen": MIN_LEN, "maxLen": 15, "format": "^[а-яе]{2,15}$ после ё→е", "pos": ["NOUN"], "case": "nomn",
                   "number": "sing|Pltm",

@@ -6,6 +6,7 @@ import type { NetClient } from '../net/NetClient';
 import type { RoomState, ServerMessage } from '../net/protocol';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
+import { showWordsOverlay } from './DefinitionOverlay';
 import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
 import { computeGameLayout, keyboardMetricsFor } from './layout';
@@ -135,6 +136,10 @@ export class OnlineGameScene {
 
     this.hud = new HudView(app.screen.width, { human: 'Вы', opponent: 'Соперник' });
     this.view.addChild(this.hud);
+    // Нажатие на панель игроков — список слов партии и толкования (Викисловарь).
+    this.hud.eventMode = 'static';
+    this.hud.cursor = 'pointer';
+    this.hud.on('pointertap', () => this.openWords());
 
     this.boardView = new BoardView(initialState.size, initialLayout.cellSize);
     this.view.addChild(this.boardView);
@@ -241,6 +246,17 @@ export class OnlineGameScene {
     this.btnResign.position.set(layout.controlX + (layout.controlWidth + gap) * 3, layout.controlY);
     this.keyboard.setWidth(layout.keyboardWidth, layout.keyboardRows);
     this.keyboard.position.set(layout.keyboardX, layout.keyboardY);
+  }
+
+  private wordsOpen = false;
+
+  /** Список слов партии; нажатие на слово показывает толкование. */
+  private openWords(): void {
+    if (this.destroyed || this.gameOverShown || this.wordsOpen) return;
+    this.wordsOpen = true;
+    showWordsOverlay(this.app, this.view, this.state.history, this.state.you === 0 ? ['Вы', 'Соперник'] : ['Соперник', 'Вы'], () => {
+      this.wordsOpen = false;
+    });
   }
 
   private onResize = (): void => {
