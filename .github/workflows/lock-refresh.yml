@@ -1,0 +1,34 @@
+name: lock-refresh (временный)
+on:
+  push:
+    branches: [chore/audit-fix]
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Обновить уязвимые dev-зависимости
+        run: |
+          npm install --save-dev vitest@^4.1.12 typescript-eslint@latest
+          npm update vite esbuild minimatch
+          npm ls vite vitest esbuild typescript-eslint minimatch --all 2>&1 | head -40
+      - run: npm audit || true
+      - run: npm audit --omit=dev || true
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test 2>&1 | tail -30
+      - run: npm run build
+      - run: node scripts/check-dist.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lock
+          path: |
+            package.json
+            package-lock.json
+            client/package.json
+            server/package.json
+            shared/package.json
