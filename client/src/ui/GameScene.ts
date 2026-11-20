@@ -8,6 +8,7 @@ import type { TimeControlKind } from '../game/TimerModel';
 import { showDefinitionOverlay } from './DefinitionOverlay';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
+import { sound } from '../audio/Sound';
 import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
 import { computeGameLayout, keyboardMetricsFor } from './layout';
@@ -256,9 +257,9 @@ export class GameScene {
     this.dragActive = true;
     const phase = this.selection.snapshot.phase;
     if (phase === 'building') {
-      this.selection.extendPath(cell.row, cell.col);
+      if (this.selection.extendPath(cell.row, cell.col)) this.playSelect();
     } else {
-      this.selection.tapCell(cell.row, cell.col);
+      if (this.selection.tapCell(cell.row, cell.col)) sound.play('tap');
       this.keyboard.visible = this.selection.snapshot.phase === 'choosingLetter';
     }
     this.refresh();
@@ -270,6 +271,7 @@ export class GameScene {
     const cell = this.boardView.cellAt(local.x, local.y);
     if (cell === null) return;
     if (this.selection.extendPath(cell.row, cell.col)) {
+      this.playSelect();
       this.dragMoved = true;
       this.refresh();
     }
@@ -327,9 +329,15 @@ export class GameScene {
   private onLetter(letter: string): void {
     if (!this.controller.isHumanTurn || this.aiThinking || this.historyOpen) return;
     if (this.selection.chooseLetter(letter)) {
+      sound.play('place');
       this.keyboard.visible = false;
       this.refresh();
     }
+  }
+
+  /** Нота пентатоники растёт с длиной выбранной цепочки. */
+  private playSelect(): void {
+    sound.play('select', this.selection.snapshot.path.length - 1);
   }
 
   private onCancel(): void {
@@ -355,16 +363,19 @@ export class GameScene {
     if (!this.controller.isHumanTurn || this.aiThinking) return;
     const move = this.selection.toMove();
     if (move === null) {
+      sound.play('error');
       this.shakeBoard();
       this.refresh('Выделите слово, включая новую букву');
       return;
     }
     const result = this.controller.applyHumanMove(move);
     if (!result.ok) {
+      sound.play('error');
       this.shakeBoard();
       this.refresh(ERROR_TEXT[result.error ?? 'GAME_FINISHED']);
       return;
     }
+    sound.play('word', move.path.length);
     this.selection.reset();
     this.keyboard.visible = false;
     this.aiCell = null;
@@ -403,6 +414,7 @@ export class GameScene {
         this.aiCell = { row: outcome.cell.row, col: outcome.cell.col };
         this.aiPath = outcome.path;
         this.startPop(outcome.cell);
+        sound.play('opponent');
         this.refresh('Бот: ' + (outcome.word ?? '').toUpperCase() + ' (+' + (outcome.points ?? 0) + ')');
         this.aiTimer = setTimeout(() => {
           this.aiTimer = null;
@@ -634,6 +646,10 @@ export class GameScene {
   private showGameOver(): void {
     if (this.gameOverShown) return;
     this.gameOverShown = true;
+    {
+      const [me, bot] = [this.controller.game.players[0]!.score, this.controller.game.players[1]!.score];
+      sound.play(me > bot ? 'win' : me < bot ? 'lose' : 'draw');
+    }
     this.timer.stop();
     // Результат фиксируется один раз, до показа оверлея (для локального рейтинга).
     this.callbacks.onGameOver?.(this.controller.game.players[0]!.score);

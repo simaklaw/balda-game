@@ -60,6 +60,7 @@ export class KeyboardView extends Container {
           height: keyHeight,
           color: palette().panel,
           fontSize: Math.max(15, Math.floor(keyHeight * 0.42)),
+          sfx: 'key',
           onTap: () => this.onLetter(letter),
         });
         key.position.set(x, y);

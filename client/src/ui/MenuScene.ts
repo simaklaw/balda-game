@@ -6,7 +6,8 @@ import type { LeaderboardEntry } from '../game/leaderboard';
 import type { LeaderboardRow } from '../platform/types';
 import { safeInsets } from './safeArea';
 import { Button } from './Button';
-import { FONT_FAMILY, palette, setTheme, themeKind } from '../theme';
+import { FONT_FAMILY, LETTER_FONT, palette, setTheme, themeKind } from '../theme';
+import { sound } from '../audio/Sound';
 
 export interface MenuSelection {
   difficulty: Difficulty;
@@ -68,6 +69,7 @@ export class MenuScene {
   private readonly sizeButtons: Button[] = [];
   private readonly timeButtons: Button[] = [];
   private readonly btnTheme: Button;
+  private readonly btnSound: Button;
   private readonly btnLeaderboard: Button;
   private readonly btnRules: Button;
   private readonly btnOnline: Button;
@@ -94,7 +96,14 @@ export class MenuScene {
     this.dictInfo = dictInfo;
     this.title = new Text({
       text: 'БАЛДА',
-      style: { fontFamily: FONT_FAMILY, fontSize: 56, fill: palette().text },
+      style: {
+        fontFamily: LETTER_FONT,
+        fontSize: 56,
+        fontWeight: '700',
+        fill: palette().gold,
+        letterSpacing: 8,
+        dropShadow: { color: 0x000000, alpha: 0.35, blur: 6, distance: 3, angle: Math.PI / 2 },
+      },
     });
     this.title.anchor.set(0.5);
     this.subtitle = new Text({
@@ -187,11 +196,11 @@ export class MenuScene {
     }
 
     this.btnTheme = new Button({
-      caption: 'Тема: ' + (themeKind() === 'dark' ? 'тёмная' : 'светлая'),
-      width: 200,
+      caption: themeKind() === 'dark' ? 'Тёмная' : 'Светлая',
+      width: 94,
       height: 44,
       color: palette().panel,
-      fontSize: 16,
+      fontSize: 15,
       onTap: () => {
         const next = themeKind() === 'dark' ? 'light' : 'dark';
         setTheme(next);
@@ -204,6 +213,21 @@ export class MenuScene {
       },
     });
     this.view.addChild(this.btnTheme);
+
+    this.btnSound = new Button({
+      caption: sound.enabled ? 'Звук: вкл' : 'Звук: выкл',
+      width: 94,
+      height: 44,
+      color: palette().panel,
+      fontSize: 15,
+      sfx: 'none',
+      onTap: () => {
+        sound.setEnabled(!sound.enabled);
+        this.btnSound.setCaption(sound.enabled ? 'Звук: вкл' : 'Звук: выкл');
+        if (sound.enabled) sound.play('word', 4);
+      },
+    });
+    this.view.addChild(this.btnSound);
 
     this.btnRules = new Button({
       caption: 'Правила',
@@ -454,6 +478,7 @@ export class MenuScene {
       for (const button of group) button.setHeight(rowH);
     }
     this.btnTheme.setHeight(themeH);
+    this.btnSound.setHeight(themeH);
     this.btnRules.setHeight(rulesH);
     this.btnLeaderboard.setHeight(leaderboardH);
     this.btnOnline.setHeight(onlineH);
@@ -499,8 +524,11 @@ export class MenuScene {
       this.hint.position.set(width / 2, y + 2);
     }
     y += hintH;
-    this.btnTheme.setWidth(200);
-    this.btnTheme.position.set((width - 200) / 2, y);
+    const halfW = Math.min(94, Math.floor((availW - ROW_GAP) / 2));
+    this.btnTheme.setWidth(halfW);
+    this.btnSound.setWidth(halfW);
+    this.btnTheme.position.set(Math.floor((width - (halfW * 2 + ROW_GAP)) / 2), y);
+    this.btnSound.position.set(Math.floor((width - (halfW * 2 + ROW_GAP)) / 2) + halfW + ROW_GAP, y);
     y += themeH + 10;
     this.btnRules.setWidth(200);
     this.btnRules.position.set((width - 200) / 2, y);

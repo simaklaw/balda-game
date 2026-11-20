@@ -5,8 +5,9 @@ import type { LeaderboardRow } from './platform';
 import { addResult, parseLeaderboard, serializeLeaderboard, LEADERBOARD_KEY } from './game/leaderboard';
 import type { LeaderboardEntry } from './game/leaderboard';
 import { setTheme } from './theme';
-import { palette, themeKind } from './theme';
+import { palette, themeKind, pageBackground } from './theme';
 import { getPerformanceConfig, invalidateDeviceInfo } from './perf';
+import { installAudioUnlock } from './audio/Sound';
 import { GameScene } from './ui/GameScene';
 import type { GameSceneOptions } from './ui/GameScene';
 import { LobbyScene } from './ui/LobbyScene';
@@ -19,7 +20,7 @@ interface Scene {
 }
 
 /** Цвет фона страницы синхронизируется с темой, чтобы не было вспышек. */
-const cssBackground = (): string => '#' + palette().bg.toString(16).padStart(6, '0');
+const cssBackground = (): string => pageBackground();
 
 /** Уступить кадр: браузер отрисовывает #boot до тяжёлой синхронной работы. */
 const nextFrame = (): Promise<void> =>
@@ -39,12 +40,14 @@ async function bootstrap(): Promise<void> {
   const app = new Application();
   await app.init({
     background: palette().bg,
+    backgroundAlpha: 0, // фон страницы (CSS-градиент) просвечивает через canvas
     resizeTo: window,
     antialias: perfConfig.antialias,
     resolution: perfConfig.resolution,
     autoDensity: perfConfig.autoDensity,
   });
   document.body.appendChild(app.canvas);
+  installAudioUnlock();
   document.body.style.background = cssBackground();
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
