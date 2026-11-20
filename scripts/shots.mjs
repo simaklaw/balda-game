@@ -5,7 +5,7 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text()); });
+page.on('console', (m) => { if (true) console.log('CONSOLE', m.text()); });
 await page.goto(url);
 await page.waitForTimeout(6000);
 const hash = async () => createHash('md5').update(await page.screenshot()).digest('hex');
