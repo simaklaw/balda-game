@@ -183,7 +183,7 @@ export class BoardView extends Container {
         }
         if (isNew) {
           overlay.roundRect(x - 2, y - 2, size + 4, size + 4, radius + 2).stroke({ width: 6, color: palette().cellNew, alpha: 0.22 });
-          overlay.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell, alpha: 0.94 });
+          overlay.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell });
           overlay.roundRect(x, y, size, size - lip, radius).stroke({ width: 3, color: palette().cellNew });
         } else if (inPath(row, col)) {
           overlay.roundRect(x, y, size, size - lip, radius).fill({ color: gold, alpha: 0.38 });
