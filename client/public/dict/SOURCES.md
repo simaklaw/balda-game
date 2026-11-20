@@ -1,7 +1,7 @@
 # Источники словаря
 
 Словарь собирается **скриптом** `tools/dict/build.py` (не руками) и описывается `MANIFEST.json`
-(источники, sha256, правила, счётчики). Итог: **67291** слов в одном файле `words.txt` (sha256 `2fada0429d14…`).
+(источники, sha256, правила, счётчики). Итог: **67296** слов в одном файле `words.txt` (sha256 `5445c6e6c077…`).
 
 **Лицензии.** Данные словаря — CC BY-SA 4.0 (`LICENSE-DATA`); код игры — MIT (`LICENSE`).
 Разделение обязательно: OpenCorpora и Викисловарь — CC BY-SA, поэтому `words.txt` — производный объект под SA.
@@ -10,7 +10,7 @@
 
 | Источник | Лицензия | Роль |
 |---|---|---|
-| [OpenCorpora](https://opencorpora.org/) (дамп 2019, через Kaggle) | CC BY-SA 3.0 | контур A: леммы-существительные с разметкой (в т.ч. `Pltm`), морфоанализ кандидатов |
+| [OpenCorpora](https://opencorpora.org/) (дамп 2019, Kaggle `rtatman/opencorpora-russian`) | CC BY-SA заявлена проектом, версия неизвестна; Kaggle противоречив: поле 4.0, описание ссылается на 3.0 | контур A: леммы-существительные с разметкой (в т.ч. `Pltm`), морфоанализ кандидатов; права на переоформление upstream не подтверждены — см. `LICENSE-DATA` |
 | [Harrix/Russian-Nouns](https://github.com/Harrix/Russian-Nouns) (основа — ODict/Ефремова) | MIT, © Sergienko Anton | кандидаты контура B; текст лицензии — `LICENSES/Harrix-Russian-Nouns-MIT.txt` |
 | Заголовки русского Викисловаря (дамп 2026-02, список из [rus_dict_wiktionary](https://github.com/EgorTatarnikov/rus_dict_wiktionary)) | CC BY-SA 4.0 | «второй свидетель» существования слова (в словарь сами по себе слова не попадают) |
 | Неологизмы XXI в. (574 слова-кандидата) | список слов | принимаются только при подтверждении OpenCorpora/Викисловарём |
@@ -25,8 +25,8 @@
 5. Кандидаты Harrix, которых нет среди лемм OpenCorpora: падежные/числовые формы и не-существительные отклоняются; слова, неизвестные OpenCorpora, принимаются только при наличии в Викисловаре.
 
 ## Итог сборки
-Принято по правилам: allowlist — 232, harrix+wikt — 8500, oc-lemma — 58533, variant-nom — 26.
-Отклонено: blocklist — 40, form-of — 457, not-noun-lemma — 128, proper-or-abbr — 143, unverified — 1486 (список с причинами — `tools/dict/rejected.tsv`, очередь вычитки).
+Принято по правилам: allowlist — 243, harrix+wikt — 8500, oc-lemma — 58527, variant-nom — 26.
+Отклонено: blocklist — 46, form-of — 457, not-noun-lemma — 128, proper-or-abbr — 143, unverified — 1486 (список с причинами — `tools/dict/rejected.tsv`, очередь вычитки).
 
 ## Воспроизводимость
 `python3 tools/dict/verify.py` пересобирает словарь из закоммиченных источников и сверяет sha256 с `words.txt`.
@@ -37,4 +37,4 @@
 Русский Викисловарь (REST API), CC BY-SA 4.0. Толкования не хранятся в репозитории; кэш localStorage `balda.def.<слово>`.
 
 ## OpenRussian (частотный прокси)
-Badestrand/russian-dictionary (OpenRussian.org), CC BY-SA 4.0. Только порядок строк: KPI покрытия и отбор стартовых слов. Не источник приёмки слов.
+Badestrand/russian-dictionary (OpenRussian.org), CC BY-SA 4.0. Порядок строк используется как эвристика для KPI покрытия и отбора стартовых слов; подтверждённого числового поля частотности нет. Не источник приёмки слов.
