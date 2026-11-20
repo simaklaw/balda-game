@@ -2,6 +2,8 @@ name: lock-refresh (временный)
 on:
   push:
     branches: [chore/audit-fix]
+permissions:
+  contents: write
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -23,12 +25,10 @@ jobs:
       - run: npm test 2>&1 | tail -30
       - run: npm run build
       - run: node scripts/check-dist.mjs
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lock
-          path: |
-            package.json
-            package-lock.json
-            client/package.json
-            server/package.json
-            shared/package.json
+      - name: Закоммитить обновлённые package*.json в ветку
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add package.json package-lock.json client/package.json server/package.json shared/package.json
+          git commit -m "chore(deps): обновить vitest 4.1.12, typescript-eslint 8.73, vite 6.4.6 (0 уязвимостей npm audit)" || exit 0
+          git push origin HEAD:chore/audit-fix
