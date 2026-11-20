@@ -81,5 +81,26 @@ class BuiltDictionary(unittest.TestCase):
         self.assertEqual(out, WORDS_PATH.read_bytes())
 
 
+class StartWordsTests(unittest.TestCase):
+    def test_pools_up_to_date_and_valid(self):
+        import start_words
+        self.assertEqual(start_words.OUT.read_text(encoding="utf-8"), start_words.generate(),
+                         "startWords.ts устарел — запустите python3 tools/dict/start_words.py")
+
+    def test_pools_in_dictionary_with_right_length(self):
+        import re
+        import start_words
+        words = set(build.read_words(WORDS_PATH)) if hasattr(build, "read_words") else set(WORDS_PATH.read_text(encoding="utf-8").split())
+        text = start_words.OUT.read_text(encoding="utf-8")
+        for size in (3, 5, 7):
+            body = re.search(r"  %d: \[(.*?)\n  \]," % size, text, re.S).group(1)
+            pool = re.findall(r"'([а-я]+)'", body)
+            self.assertGreater(len(pool), 100)
+            self.assertEqual(len(pool), len(set(pool)))
+            for w in pool:
+                self.assertEqual(len(w), size, w)
+                self.assertIn(w, words, w)
+
+
 if __name__ == "__main__":
     unittest.main()

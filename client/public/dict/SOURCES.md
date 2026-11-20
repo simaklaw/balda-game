@@ -35,3 +35,6 @@
 
 ## Толкования слов
 Русский Викисловарь (REST API), CC BY-SA 4.0. Толкования не хранятся в репозитории; кэш localStorage `balda.def.<слово>`.
+
+## OpenRussian (частотный прокси)
+Badestrand/russian-dictionary (OpenRussian.org), CC BY-SA 4.0. Только порядок строк: KPI покрытия и отбор стартовых слов. Не источник приёмки слов.

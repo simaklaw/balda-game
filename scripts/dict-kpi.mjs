@@ -45,9 +45,37 @@ check('MANIFEST: sha256 и число слов совпадают с файло�
 const gz = gzipSync(raw, { level: 9 }).length;
 check('Размер words.txt ≤ 1,4 МБ (gzip ≤ 300 КБ)', raw.length <= 1400 * 1024 && gz <= 300 * 1024, `${Math.round(raw.length / 1024)} КБ, gzip ${Math.round(gz / 1024)} КБ`);
 
-// Информирующие: частотный список НКРЯ/FrequencyWords в репозитории отсутствует (лицензия/доступ) — метрики не подделываем.
-check('coverage@5000 (полнота по частотному списку)', false, 'НЕ ВЫЧИСЛЕНА: частотный список недоступен в CI', false);
-check('noise@20000 (доля слов вне top-20000)', false, 'НЕ ВЫЧИСЛЕНА: частотный список недоступен в CI', false);
+// Полнота по частотному ПРОКСИ: порядок строк в nouns.csv проекта OpenRussian (CC BY-SA 4.0) — это не НКРЯ.
+// Знаменатель честный: из топ-N исключаются слова, которые по правилам словаря недопустимы
+// (OpenCorpora считает их именами/аббревиатурами/не-существительными/формами мн.ч., либо они в блок-листе).
+const ocStatus = new Map(listFile('tools/dict/sources/oc-extract.tsv').map((l) => {
+  const [w, st] = l.split('\t');
+  return [w, st];
+}));
+const orRows = lines('tools/dict/sources/openrussian-nouns.tsv').filter(Boolean).map((l) => {
+  const [rank, w] = l.split('\t');
+  return { rank: Number(rank), w };
+});
+const blockSet = listWithComments('tools/dict/blocklist.txt');
+const coverage = (n) => {
+  const top = orRows.filter((r) => r.rank < n);
+  const valid = top.filter((r) => {
+    const st = ocStatus.get(r.w);
+    if (st === 'noun-excluded' || st === 'nonnoun' || st === 'noun-plur') return false;
+    return !(blockSet.has(r.w) && !allow.has(r.w));
+  });
+  const missing = valid.filter((r) => !set.has(r.w)).map((r) => r.w);
+  return { top: top.length, valid: valid.length, missing, ratio: 1 - missing.length / valid.length, raw: top.filter((r) => set.has(r.w)).length / top.length };
+};
+const c5 = coverage(5000);
+check('coverage@5000 ≥ 98 % (прокси OpenRussian, знаменатель без недопустимых слов)', c5.ratio >= 0.98,
+  `${(c5.ratio * 100).toFixed(2)} % (${c5.valid - c5.missing.length}/${c5.valid}); без исключений знаменателя ${(c5.raw * 100).toFixed(1)} %; не хватает: ${c5.missing.slice(0, 25).join(', ')}`);
+for (const n of [10000, 20000]) {
+  const c = coverage(n);
+  check(`coverage@${n} (информирующая)`, c.ratio >= 0.98, `${(c.ratio * 100).toFixed(2)} % (${c.valid - c.missing.length}/${c.valid})`, false);
+}
+// noise@20000: на частотном прокси не определима (в OpenRussian всего ~26 тыс. существительных, а в словаре ~67 тыс.).
+check('noise@20000 (доля слов вне top-20000)', false, 'НЕ ВЫЧИСЛЕНА: нужен полный частотный список (НКРЯ/FrequencyWords), прокси слишком короткий', false);
 
 let failed = 0;
 for (const r of results) {

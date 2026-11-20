@@ -18,7 +18,7 @@ SPLIT = re.compile(r"[ ,]")
 
 
 def main(path: str):
-    cand = candidates()
+    cand = candidates(for_extract=True)
     ok, plur, excl, nonnoun, forms = {}, set(), {}, {}, {}
     with open(path, encoding="utf-8") as f:
         state, lemma = 0, ""

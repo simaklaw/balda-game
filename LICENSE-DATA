@@ -22,3 +22,6 @@ International (CC BY-SA 4.0): https://creativecommons.org/licenses/by-sa/4.0/leg
 (https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt). В этой среде сеть закрыта,
 полный текст не загружен — по ссылке выше он доступен. Лицензию набора OpenCorpora на Kaggle
 (rtatman/opencorpora-russian) и условия OpenCorpora стоит перепроверить на сайтах первоисточников.
+
+---
+Дополнительно: частотный порядок слов и производные пулы стартовых слов используют данные OpenRussian.org (CC BY-SA 4.0, https://github.com/Badestrand/russian-dictionary).

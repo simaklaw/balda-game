@@ -6,6 +6,12 @@
     "rawSha256": "02f58cf44b9cb1d3001f945836ced46dacf7630a9f3b79ddca6802001f36cc4b",
     "url": "https://opencorpora.org/"
   },
+  "openrussian": {
+    "file": "nouns.csv (Badestrand/russian-dictionary; порядок строк = частотность)",
+    "license": "CC BY-SA 4.0",
+    "rawSha256": "c388f9e6dde51932832be8d7e9afdbe9f0acee72fcf70677f0fe25ea61293c84",
+    "url": "https://github.com/Badestrand/russian-dictionary"
+  },
   "wiktionary-titles": {
     "file": "russian_dictionary.txt (EgorTatarnikov/rus_dict_wiktionary: заголовки с русским разделом, дамп ruwiktionary 2026-02)",
     "license": "CC BY-SA 4.0",

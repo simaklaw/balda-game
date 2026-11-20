@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import SRC, norm, read_words, candidates
 
 titles = {norm(w) for w in read_words(Path(sys.argv[1]))}
-w = sorted(candidates() & titles)
+w = sorted(candidates(for_extract=True) & titles)
 (SRC / "wikt-witness.txt").write_text("".join(x + "\n" for x in w), encoding="utf-8")
 print(f"wikt-witness.txt: {len(w)} слов")
 
