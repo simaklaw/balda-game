@@ -462,7 +462,7 @@ export class MenuScene {
     const blockGap = ultra ? 10 : Math.round(18 * s) + 6;
     const titleBlock = ultra ? titleFont + 4 : titleFont + 6 + subFont + Math.round(16 * s) + 8;
     // Строка о словаре добавляет вторую строку подсказки.
-    const hintH = ultra ? 0 : this.dictInfo === '' ? 36 : 52;
+    const hintH = ultra ? 0 : this.dictInfo === '' ? 36 : 64;
 
     this.title.style.fontSize = titleFont;
     this.subtitle.style.fontSize = subFont;

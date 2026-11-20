@@ -18,8 +18,28 @@ for (let y = 820; y > 450; y -= 10) {
 }
 await page.waitForTimeout(1500);
 await page.screenshot({ path: 'shots/game-dark.png' });
-// тап по клетке рядом с центральным словом (поле 5×5, пустая клетка над центром)
-await page.mouse.click(195, 195 + 60);
-await page.waitForTimeout(800);
-await page.screenshot({ path: 'shots/game-pick.png' });
+const flow = async (tag) => {
+  await page.mouse.click(195, 195); // «+» над центральной буквой
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `shots/${tag}-keyboard.png` });
+  await page.mouse.click(110, 640); // клавиша
+  await page.waitForTimeout(600);
+  await page.mouse.click(195, 268); // буква под новой клеткой
+  await page.waitForTimeout(300);
+  await page.mouse.click(195, 195);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `shots/${tag}-path.png` });
+};
+await flow('dark');
+await page.evaluate(() => localStorage.setItem('balda.theme', 'light'));
+await page.reload();
+await page.waitForTimeout(6000);
+await page.screenshot({ path: 'shots/menu-light.png' });
+for (let y = 820; y > 450; y -= 10) {
+  await page.mouse.click(195, y);
+  await page.waitForTimeout(700);
+  if ((await hash()) !== (await (async () => before)())) { break; }
+}
+await page.waitForTimeout(1500);
+await page.screenshot({ path: 'shots/game-light.png' });
 await browser.close();

@@ -87,7 +87,7 @@ export class Button extends Container {
     const face = new Graphics();
     face.roundRect(0, 0, width, faceH, radius).fill({ color: top }).stroke({ width: 1, color: shade(base, 0.18), alpha: 0.7 });
     // Блик по верхней кромке.
-    face.roundRect(2, 2, width - 4, Math.max(2, faceH * 0.42), Math.max(2, radius - 2)).fill({ color: 0xffffff, alpha: this.pressed ? 0.03 : 0.1 });
+    face.roundRect(2, 2, width - 4, Math.max(2, faceH * 0.42), Math.max(2, radius - 2)).fill({ color: 0xffffff, alpha: this.pressed ? 0.02 : 0.07 });
     g.addChild(face, this.caption);
   }
 
