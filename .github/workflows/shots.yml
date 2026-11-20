@@ -20,6 +20,12 @@ jobs:
           sleep 2
           mkdir -p shots
           node scripts/shots.mjs
+          git fetch origin main
+          git worktree add ../m origin/main
+          (cd ../m && npm ci && npm run build)
+          (cd ../m/client/dist && python3 -m http.server 8081 >/dev/null 2>&1 &)
+          sleep 2
+          node scripts/shots.mjs http://localhost:8081/ main-
       - run: |
           git config user.name github-actions
           git config user.email actions@users.noreply.github.com
