@@ -83,7 +83,7 @@ export class Button extends Container {
     const base = this.enabled ? (this.options.color ?? palette().accent) : palette().panel;
     const bright = luminance(base) > 0.28;
     const faceH = height - LIP;
-    const radius = Math.min(11, faceH / 2.6);
+    const radius = 4;
     this.bg.clear();
     // Тонкая тёмная кромка снизу: объём без глянца.
     this.bg.roundRect(0, LIP, width, faceH, radius).fill({ color: 0x000000, alpha: 0.45 });
