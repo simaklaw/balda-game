@@ -120,7 +120,7 @@ export class MenuScene {
   /** Строка о словаре в подвале меню («Словарь: 49 312 слов» / «Словарь: ограниченный»). */
   private readonly dictInfo: string;
   private difficulty: Difficulty = 'medium';
-  private boardSize: 3 | 5 | 7 = 7;
+  private boardSize: 3 | 5 | 7 = 5;
   private timeControl: TimeControlKind = 'classic';
 
   constructor(
