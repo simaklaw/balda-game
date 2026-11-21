@@ -3,6 +3,7 @@ import type {
   PlatformAdapter,
   PlatformId,
   PlatformLeaderboards,
+  PlatformProfile,
   PlatformStorage,
 } from './types';
 
@@ -12,6 +13,8 @@ const SDK_URL = '/sdk.js';
 /** Минимальные типы SDK Яндекс Игр (v2) — без внешних пакетов. */
 export interface YandexPlayer {
   getName(): string;
+  getPhoto?(size: 'small' | 'medium' | 'large'): string;
+  getUniqueID?(): string;
   getData(keys?: string[]): Promise<Record<string, unknown>>;
   setData(data: Record<string, unknown>): Promise<void>;
 }
@@ -106,6 +109,28 @@ export class YandexAdapter implements PlatformAdapter {
     try {
       const name = player.getName();
       return typeof name === 'string' && name !== '' ? name : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getProfile(): Promise<PlatformProfile | null> {
+    const player = await this.ensurePlayer();
+    if (player === null) return null;
+    try {
+      const rawName = player.getName();
+      const name = typeof rawName === 'string' && rawName !== '' ? rawName : 'Игрок';
+      let avatarUrl: string | null = null;
+      if (typeof player.getPhoto === 'function') {
+        const photo = player.getPhoto('large');
+        if (typeof photo === 'string' && photo.startsWith('https://')) avatarUrl = photo;
+      }
+      let id: string | null = null;
+      if (typeof player.getUniqueID === 'function') {
+        const uid = player.getUniqueID();
+        if (typeof uid === 'string' && uid !== '') id = uid;
+      }
+      return { id, name, avatarUrl };
     } catch {
       return null;
     }

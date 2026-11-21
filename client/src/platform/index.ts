@@ -1,4 +1,4 @@
-import type { PlatformAdapter, PlatformId } from './types';
+import type { PlatformAdapter, PlatformId, PlatformProfile } from './types';
 import { WebAdapter } from './web';
 import { loadYandexSdk, YandexAdapter } from './yandex';
 import { VKAdapter } from './vk';
@@ -10,8 +10,11 @@ export type {
   PlatformAdapter,
   PlatformId,
   PlatformLeaderboards,
+  PlatformProfile,
+  PlatformSocial,
   PlatformStorage,
 } from './types';
+export { buildInviteLink, parseLaunchRoom } from './social';
 
 /** Минимальный интервал между межстраничными рекламами. */
 export const AD_MIN_INTERVAL_MS = 180000;
@@ -69,4 +72,18 @@ export async function createAdapter(): Promise<PlatformAdapter> {
     if (webApp !== null) return new TelegramAdapter(webApp);
   }
   return new WebAdapter();
+}
+
+/** Профиль игрока: из адаптера, иначе из имени, иначе null. Никогда не бросает. */
+export async function fetchProfile(adapter: PlatformAdapter): Promise<PlatformProfile | null> {
+  try {
+    if (typeof adapter.getProfile === 'function') {
+      const profile = await adapter.getProfile();
+      if (profile !== null) return profile;
+    }
+    const name = await adapter.getPlayerName();
+    return name === null ? null : { id: null, name, avatarUrl: null };
+  } catch {
+    return null;
+  }
 }
