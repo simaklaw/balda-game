@@ -1,6 +1,9 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import { loadDawg } from './dict/dictionary';
-import { createAdapter, shouldShowInterstitial } from './platform';
+import { createAdapter, fetchProfile, shouldShowInterstitial } from './platform';
+import { parseLaunchRoom } from './platform/social';
+import { loadAvatar } from './ui/avatar';
+import type { Texture } from 'pixi.js';
 import type { LeaderboardRow } from './platform';
 import { addResult, parseLeaderboard, serializeLeaderboard, LEADERBOARD_KEY } from './game/leaderboard';
 import type { LeaderboardEntry } from './game/leaderboard';
@@ -218,12 +221,26 @@ async function bootstrap(): Promise<void> {
     );
   };
 
-  let playerName = 'Игрок';
+  // Профиль площадки: имя сразу, аватар догружается и подхватывается следующей партией.
+  const profile = await fetchProfile(adapter);
+  const playerName = profile?.name ?? 'Игрок';
+  let playerAvatar: Texture | null = null;
+  void loadAvatar(profile?.avatarUrl).then((texture) => {
+    playerAvatar = texture;
+  });
+  // Комната из ссылки-приглашения: открываем лобби и входим один раз.
+  let launchRoom: string | null = null;
   try {
-    playerName = (await adapter.getPlayerName()) ?? 'Игрок';
+    launchRoom = parseLaunchRoom(window.location.href);
   } catch {
-    /* имя недоступно — играем под нейтральным именем */
+    launchRoom = null;
   }
+
+  const takeLaunchRoom = (): string | null => {
+    const code = launchRoom;
+    launchRoom = null;
+    return code;
+  };
 
   const showLobby = (): void => {
     setScene(
@@ -244,6 +261,7 @@ async function bootstrap(): Promise<void> {
             ),
         },
         adapter.id,
+        { social: adapter.social, launchRoom: takeLaunchRoom() },
       ),
     );
   };
@@ -281,6 +299,8 @@ async function bootstrap(): Promise<void> {
                 difficulty: selection.difficulty,
                 boardSize: selection.boardSize,
                 timeControl: selection.timeControl,
+                playerName,
+                playerAvatar,
               }),
             onThemeChange: () => {
               app.renderer.background.color = palette().bg;
@@ -299,7 +319,8 @@ async function bootstrap(): Promise<void> {
       );
     })();
   };
-  showMenu();
+  if (launchRoom !== null) showLobby();
+  else showMenu();
 
   // Сообщаем платформе, что игра полностью загрузилась (требование Яндекс Игр).
   await adapter.ready();

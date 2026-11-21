@@ -1,4 +1,5 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import type { Texture } from 'pixi.js';
 import { DISPLAY_FONT, FONT_FAMILY, LETTER_FONT, palette } from '../theme';
 
 export interface HudLabels {
@@ -32,6 +33,8 @@ export class HudView extends Container {
   private readonly humanInitial: Text;
   private readonly opponentInitial: Text;
   private readonly fullNames: [string, string];
+  private readonly avatars: [Sprite | null, Sprite | null] = [null, null];
+  private readonly avatarMasks: [Graphics | null, Graphics | null] = [null, null];
   private width_ = 0;
   private turn: 'human' | 'opponent' | null = null;
 
@@ -56,6 +59,32 @@ export class HudView extends Container {
     });
     this.addChild(this.cards, this.humanInitial, this.opponentInitial, this.humanName, this.humanScore, this.opponentName, this.opponentScore, this.status);
     this.layout(width);
+  }
+
+  /** Имя игрока в карточке (0 — вы, 1 — соперник). */
+  setName(side: 0 | 1, name: string): void {
+    if (this.fullNames[side] === name) return;
+    this.fullNames[side] = name;
+    const initial = [...name.trim()][0]?.toUpperCase() ?? '?';
+    (side === 0 ? this.humanInitial : this.opponentInitial).text = initial;
+    this.layout(this.width_);
+  }
+
+  /** Аватар игрока из профиля площадки; null — остаётся плитка-инициал. */
+  setAvatar(side: 0 | 1, texture: Texture | null): void {
+    this.avatars[side]?.destroy();
+    this.avatarMasks[side]?.destroy();
+    this.avatars[side] = null;
+    this.avatarMasks[side] = null;
+    if (texture !== null) {
+      const sprite = new Sprite(texture);
+      const mask = new Graphics();
+      this.addChild(mask, sprite);
+      sprite.mask = mask;
+      this.avatars[side] = sprite;
+      this.avatarMasks[side] = mask;
+    }
+    this.layout(this.width_);
   }
 
   layout(width: number): void {
@@ -86,6 +115,19 @@ export class HudView extends Container {
     const nameMax = cardW - 38 - 44;
     this.humanName.text = fit(this.fullNames[0], this.humanName, nameMax);
     this.opponentName.text = fit(this.fullNames[1], this.opponentName, nameMax);
+    [left, right].forEach((x, i) => {
+      const sprite = this.avatars[i];
+      const mask = this.avatarMasks[i];
+      if (sprite === null || sprite === undefined || mask === null || mask === undefined) return;
+      sprite.position.set(x + 5, 2 + 5);
+      sprite.width = 24;
+      sprite.height = 24;
+      mask.clear();
+      mask.roundRect(x + 5, 2 + 5, 24, 24, 3).fill({ color: 0xffffff });
+      mask.roundRect(x + 5, 2 + 5, 24, 24, 3).stroke({ width: 1, color: palette().tileEdge });
+    });
+    this.humanInitial.visible = this.avatars[0] === null;
+    this.opponentInitial.visible = this.avatars[1] === null;
     this.humanInitial.anchor.set(0.5);
     this.humanInitial.position.set(left + 17, 2 + 5 + 10.5);
     this.opponentInitial.anchor.set(0.5);

@@ -1,4 +1,5 @@
-import type { PlatformAdapter, PlatformId, PlatformStorage } from './types';
+import { buildInviteLink } from './social';
+import type { PlatformAdapter, PlatformId, PlatformSocial, PlatformStorage } from './types';
 
 function withStorage(action: () => void): void {
   try {
@@ -23,6 +24,25 @@ export class WebAdapter implements PlatformAdapter {
   async showInterstitial(): Promise<void> {
     /* на вебе рекламы нет */
   }
+
+  /** В браузере приглашение — системное окно «Поделиться» (там, где оно есть). */
+  readonly social: PlatformSocial | undefined =
+    typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+      ? {
+          invite: async (roomId) => {
+            try {
+              await navigator.share({
+                title: 'Балда',
+                text: 'Сыграем в Балду? Код комнаты: ' + roomId,
+                url: buildInviteLink(window.location.href, roomId),
+              });
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        }
+      : undefined;
 
   readonly storage: PlatformStorage = {
     get: async (key) => {

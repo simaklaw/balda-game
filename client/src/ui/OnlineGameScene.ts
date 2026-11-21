@@ -135,7 +135,9 @@ export class OnlineGameScene {
       controlCount: 4,
     });
 
-    this.hud = new HudView(app.screen.width, { human: 'Вы', opponent: 'Соперник' });
+    const meInit = initialState.players[initialState.you]?.name;
+    const otherInit = initialState.players[initialState.you === 0 ? 1 : 0]?.name;
+    this.hud = new HudView(app.screen.width, { human: meInit ?? 'Вы', opponent: otherInit ?? 'Соперник' });
     this.view.addChild(this.hud);
     // Нажатие на панель игроков — список слов партии и толкования (Викисловарь).
     this.hud.eventMode = 'static';
