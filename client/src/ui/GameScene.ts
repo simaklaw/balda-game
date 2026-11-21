@@ -1,4 +1,5 @@
 import { Application, Container, FederatedPointerEvent, Graphics, Text } from 'pixi.js';
+import type { Texture } from 'pixi.js';
 import type { CellPos, Dawg, Difficulty, MoveErrorCode } from '@balda/shared';
 import { defaultConfigFor, pickStartWord } from '@balda/shared';
 import { LocalGameController } from '../game/LocalGameController';
@@ -22,6 +23,9 @@ export interface GameSceneOptions {
   difficulty: Difficulty;
   boardSize: 3 | 5 | 7;
   timeControl: TimeControlKind;
+  /** Имя и аватар игрока из профиля площадки (необязательно). */
+  playerName?: string;
+  playerAvatar?: Texture | null;
 }
 
 export interface GameSceneCallbacks {
@@ -119,7 +123,8 @@ export class GameScene {
     this.inputLayer.eventMode = 'static';
     this.view.addChild(this.inputLayer);
 
-    this.hud = new HudView(app.screen.width);
+    this.hud = new HudView(app.screen.width, { human: options.playerName ?? 'Вы', opponent: 'Бот' });
+    if (options.playerAvatar !== undefined && options.playerAvatar !== null) this.hud.setAvatar(0, options.playerAvatar);
     this.view.addChild(this.hud);
 
     const initialLayout = computeGameLayout({

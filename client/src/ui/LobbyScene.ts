@@ -3,7 +3,7 @@ import { NetClient } from '../net/NetClient';
 import type { SessionStore } from '../net/NetClient';
 import { detectWsOverride, resolveWsUrl } from '../net/wsUrl';
 import type { AuthProvider, PlayerProfile, RoomState, ServerMessage } from '../net/protocol';
-import type { PlatformId } from '../platform/types';
+import type { PlatformId, PlatformSocial } from '../platform/types';
 import { Button } from './Button';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
@@ -12,6 +12,13 @@ import { FONT_FAMILY, palette } from '../theme';
 export interface LobbySceneCallbacks {
   onBack: () => void;
   onGameStarted: (client: NetClient, state: RoomState) => void;
+}
+
+/** Возможности площадки для игры с друзьями. */
+export interface LobbyExtras {
+  social?: PlatformSocial;
+  /** Код комнаты из ссылки-приглашения: входим автоматически. */
+  launchRoom?: string | null;
 }
 
 /** Сколько ждём ответ сервера на запрос профиля. */
@@ -36,6 +43,9 @@ export class LobbyScene {
   private readonly btnJoin: Button;
   private readonly btnProfile: Button;
   private readonly btnBack: Button;
+  private readonly btnInvite: Button;
+  private readonly social: PlatformSocial | undefined;
+  private waitingRoom: string | null = null;
   private net: NetClient | null = null;
   private joining = false;
   private codeOverlay: Container | null = null;
@@ -50,7 +60,9 @@ export class LobbyScene {
     store: SessionStore | undefined,
     callbacks: LobbySceneCallbacks,
     platformId: PlatformId = 'web',
+    extras: LobbyExtras = {},
   ) {
+    this.social = extras.social;
     this.app = app;
     this.playerName = playerName;
     this.store = store;
@@ -119,7 +131,16 @@ export class LobbyScene {
         setTimeout(() => this.callbacks.onBack(), 0);
       },
     });
+    this.btnInvite = new Button({
+      caption: 'Пригласить друга',
+      width: buttonWidth,
+      height: 48,
+      fontSize: 17,
+      onTap: () => void this.invite(),
+    });
+    this.btnInvite.visible = false;
     this.view.addChild(
+      this.btnInvite,
       this.title,
       this.statusText,
       this.btnQuick,
@@ -131,6 +152,23 @@ export class LobbyScene {
 
     window.addEventListener('resize', this.onResize);
     this.layout();
+    const launch = extras.launchRoom;
+    if (launch !== undefined && launch !== null && launch !== '') {
+      setTimeout(() => {
+        if (!this.destroyed) void this.joinRoom(launch);
+      }, 0);
+    }
+  }
+
+  private async invite(): Promise<void> {
+    const room = this.waitingRoom;
+    if (room === null || this.social === undefined) return;
+    try {
+      const ok = await this.social.invite(room);
+      if (!ok) this.setStatus('Комната ' + room + ' — сообщите код другу. Ждём соперника…');
+    } catch {
+      this.setStatus('Комната ' + room + ' — сообщите код другу. Ждём соперника…');
+    }
   }
 
   private readonly onResize = (): void => {
@@ -163,6 +201,8 @@ export class LobbyScene {
     this.btnBack.position.set((width - buttonWidth) / 2, y);
     y += 44 + 18;
     this.statusText.position.set(width / 2, y);
+    this.btnInvite.setWidth(buttonWidth);
+    this.btnInvite.position.set((width - buttonWidth) / 2, y + 52);
   }
 
   private setStatus(text: string): void {
@@ -260,6 +300,8 @@ export class LobbyScene {
       }
       const room = String(msg.roomId);
       this.setStatus('Комната ' + room + ' — ждём соперника…');
+      this.waitingRoom = room;
+      this.btnInvite.visible = this.social !== undefined;
       return;
     }
     if (msg.type === 'state') {
