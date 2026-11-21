@@ -33,6 +33,9 @@ export class Button extends Container {
   private readonly options: ButtonOptions;
   private enabled = true;
   private pressed = false;
+  private magX = 0;
+  private magY = 0;
+  private magS = 1;
 
   constructor(options: ButtonOptions) {
     super();
@@ -110,8 +113,29 @@ export class Button extends Container {
   private setPressed(value: boolean): void {
     if (this.pressed === value || !this.enabled) return;
     this.pressed = value;
-    this.face.y = value ? LIP - 1 : 0;
+    this.applyFace();
     this.draw();
+  }
+
+  private applyFace(): void {
+    const { width, height } = this.options;
+    const faceH = height - LIP;
+    this.face.pivot.set(width / 2, faceH / 2);
+    this.face.position.set(width / 2 + this.magX, faceH / 2 + this.magY + (this.pressed ? LIP - 1 : 0));
+    this.face.scale.set(this.magS);
+  }
+
+  /** «Магнитное» смещение грани к курсору: dx/dy в пикселях, подпись смещается чуть дальше. */
+  setMagnet(dx: number, dy: number, scale: number, labelDx: number, labelDy: number): void {
+    this.magX = dx;
+    this.magY = dy;
+    this.magS = scale;
+    this.caption.pivot.set(-labelDx / scale, -labelDy / scale);
+    this.applyFace();
+  }
+
+  get buttonSize(): { width: number; height: number } {
+    return { width: this.options.width, height: this.options.height };
   }
 
   private draw(): void {
@@ -138,6 +162,7 @@ export class Button extends Container {
     g.addChild(face);
     if (this.iconGfx !== null) g.addChild(this.iconGfx);
     g.addChild(this.caption);
+    this.applyFace();
   }
 
   /** Сменить цвет фона (для выделения выбранной опции). */

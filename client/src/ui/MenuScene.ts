@@ -6,6 +6,7 @@ import type { LeaderboardEntry } from '../game/leaderboard';
 import type { LeaderboardRow } from '../platform/types';
 import { safeInsets } from './safeArea';
 import { Button } from './Button';
+import { prefersReducedMotion, spring, stepSpring } from './spring';
 import { FONT_FAMILY, LETTER_FONT, palette, setTheme, shade, themeKind } from '../theme';
 import { sound } from '../audio/Sound';
 
@@ -115,6 +116,51 @@ export class MenuScene {
   private readonly btnRules: Button;
   private readonly btnOnline: Button;
   private readonly btnPlay: Button;
+  private readonly magnet = {
+    bx: spring(0, 170, 13),
+    by: spring(0, 170, 13),
+    lx: spring(0, 220, 15),
+    ly: spring(0, 220, 15),
+    sc: spring(1, 400, 18),
+    px: null as number | null,
+    py: null as number | null,
+  };
+  private readonly onPointerMove = (e: { global: { x: number; y: number } }): void => {
+    this.magnet.px = e.global.x;
+    this.magnet.py = e.global.y;
+  };
+  private readonly onPointerLeave = (): void => {
+    this.magnet.px = null;
+    this.magnet.py = null;
+  };
+  private readonly onMagnetTick = (): void => {
+    const m = this.magnet;
+    const dt = Math.min(this.app.ticker.deltaMS / 1000, 1 / 30);
+    const { width, height } = this.btnPlay.buttonSize;
+    const o = this.btnPlay.getGlobalPosition();
+    const cx = o.x + width / 2;
+    const cy = o.y + height / 2;
+    const R = 130;
+    let pull = 0;
+    let dx = 0;
+    let dy = 0;
+    if (m.px !== null && m.py !== null) {
+      dx = m.px - cx;
+      dy = m.py - cy;
+      const d = Math.hypot(dx, dy);
+      // Притяжение действует в радиусе R от границы кнопки.
+      const edge = Math.max(0, d - Math.min(width, height) / 2);
+      pull = edge < R ? 1 - (edge / R) * 0.35 : 0;
+    }
+    m.bx.t = dx * 0.32 * pull;
+    m.by.t = dy * 0.38 * pull;
+    m.lx.t = dx * 0.14 * pull;
+    m.ly.t = dy * 0.18 * pull;
+    m.sc.t = 1 + 0.06 * pull;
+    const lim = (v: number, a: number): number => Math.max(-a, Math.min(a, v));
+    for (const s of [m.bx, m.by, m.lx, m.ly, m.sc]) stepSpring(s, dt);
+    this.btnPlay.setMagnet(lim(m.bx.x, 22), lim(m.by.x, 14), m.sc.x, lim(m.lx.x, 10), lim(m.ly.x, 6));
+  };
   private readonly leaderboard: readonly LeaderboardEntry[];
   private readonly nativeTop: readonly LeaderboardRow[];
   /** Строка о словаре в подвале меню («Словарь: 49 312 слов» / «Словарь: ограниченный»). */
@@ -315,6 +361,11 @@ export class MenuScene {
       },
     });
     this.view.addChild(this.btnPlay);
+    if (!prefersReducedMotion()) {
+      this.app.stage.on('globalpointermove', this.onPointerMove);
+      this.app.stage.on('pointerleave', this.onPointerLeave);
+      this.app.ticker.add(this.onMagnetTick);
+    }
 
     window.addEventListener('resize', this.onResize);
     this.layout();
@@ -673,6 +724,9 @@ export class MenuScene {
 
   destroy(): void {
     window.removeEventListener('resize', this.onResize);
+    this.app.stage.off('globalpointermove', this.onPointerMove);
+    this.app.stage.off('pointerleave', this.onPointerLeave);
+    this.app.ticker.remove(this.onMagnetTick);
     this.view.destroy({ children: true });
   }
 }
