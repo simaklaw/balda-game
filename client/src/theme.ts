@@ -23,56 +23,64 @@ export interface Palette {
   gold: number;
   /** Нижняя грань фишки (объём). */
   tileEdge: number;
-  /** Центр и край фонового свечения. */
+  /** Центр фонового свечения. */
   bgGlow: number;
+  /** Рама доски (орех) и её кромка (латунь). */
+  frame: number;
+  frameEdge: number;
 }
 
 export type ThemeKind = 'dark' | 'light';
 
 export const DARK: Palette = {
-  bg: 0x0b111c,
-  panel: 0x172236,
-  panelBorder: 0x2a3b5a,
-  accent: 0x3f82ee,
-  accentDark: 0x2a5cb0,
-  ai: 0xff9a5c,
-  cell: 0xf6eedb,
-  cellBorder: 0xd2c29c,
-  cellEmpty: 0x111a2b,
-  cellNew: 0x58c27d,
-  cellPath: 0xf0c35c,
-  text: 0xf4f6fb,
-  textDim: 0x9db0c9,
-  letterText: 0x2b1f14,
-  danger: 0xe9705f,
-  success: 0x6fd08c,
-  player: 0x72b8ff,
-  gold: 0xf0c35c,
-  tileEdge: 0xb9a578,
-  bgGlow: 0x1c2c4a,
+  // «Ночная партия»: изумрудное сукно, орех, латунь и слоновая кость.
+  bg: 0x08110d,
+  panel: 0x10201a,
+  panelBorder: 0x4a4326,
+  accent: 0xc9a24b,
+  accentDark: 0x8f7230,
+  ai: 0xdc8a5e,
+  cell: 0xf4ecd9,
+  cellBorder: 0xd8c9a3,
+  cellEmpty: 0x0c2219,
+  cellNew: 0x4fc08d,
+  cellPath: 0xe6c36e,
+  text: 0xf3ead6,
+  textDim: 0xa3b3a6,
+  letterText: 0x1d1810,
+  danger: 0xdb6a52,
+  success: 0x5fc98f,
+  player: 0xeadfc4,
+  gold: 0xe3c071,
+  tileEdge: 0xb8a574,
+  bgGlow: 0x143a2c,
+  frame: 0x3a281a,
+  frameEdge: 0xa98a43,
 };
 
 export const LIGHT: Palette = {
-  bg: 0xe9e1d0,
-  panel: 0xfbf7ee,
-  panelBorder: 0xd2c6af,
-  accent: 0x2f6fb5,
-  accentDark: 0x24548a,
-  ai: 0xc96a22,
-  cell: 0xfffdf6,
-  cellBorder: 0xc4b693,
-  cellEmpty: 0xd8cdb6,
-  cellNew: 0x2f9a58,
-  cellPath: 0xe0a92e,
-  text: 0x242a33,
-  textDim: 0x66717f,
-  letterText: 0x2b1f14,
-  danger: 0xb94a3b,
-  success: 0x2f9a58,
-  player: 0x2f6fb5,
-  gold: 0xc8921f,
-  tileEdge: 0xcdbd95,
-  bgGlow: 0xf6f0e2,
+  bg: 0xece3cf,
+  panel: 0xf7f0df,
+  panelBorder: 0xb9a572,
+  accent: 0x1f5c47,
+  accentDark: 0x16443a,
+  ai: 0xb45a2e,
+  cell: 0xfffbef,
+  cellBorder: 0xcdbd93,
+  cellEmpty: 0x2d5c48,
+  cellNew: 0x1f9a67,
+  cellPath: 0xd6a73a,
+  text: 0x1c2a22,
+  textDim: 0x5d6a5f,
+  letterText: 0x1d1810,
+  danger: 0xb6452f,
+  success: 0x1f9a67,
+  player: 0x1f5c47,
+  gold: 0xa77d1c,
+  tileEdge: 0xc9b98c,
+  bgGlow: 0xf8f2e3,
+  frame: 0x7b5a38,
+  frameEdge: 0xb08a3e,
 };
 
 let current: Palette = DARK;
@@ -94,7 +102,16 @@ export function setTheme(kind: ThemeKind): void {
 export const FONT_FAMILY =
   'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 /** Буквы фишек и заголовок: «книжная» гарнитура, есть на всех платформах. */
-export const LETTER_FONT = 'Georgia, "Palatino Linotype", Palatino, "Times New Roman", serif';
+export const LETTER_FONT = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif';
+
+/** Относительная яркость цвета 0..1 (для выбора цвета текста на заливке). */
+export function luminance(color: number): number {
+  const ch = (v: number): number => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * ch((color >> 16) & 255) + 0.7152 * ch((color >> 8) & 255) + 0.0722 * ch(color & 255);
+}
 
 /** Смешать цвет с чёрным (amount<0) или белым (amount>0): amount в [-1, 1]. */
 export function shade(color: number, amount: number): number {

@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { FONT_FAMILY, LETTER_FONT, palette, shade } from '../theme';
+import { FONT_FAMILY, LETTER_FONT, palette } from '../theme';
 
 export interface HudLabels {
   human?: string;
@@ -47,10 +47,10 @@ export class HudView extends Container {
       [right, palette().ai],
     ] as const) {
       this.cards
-        .roundRect(x, 2, cardW, CARD_H, 12)
+        .roundRect(x, 2, cardW, CARD_H, 10)
         .fill({ color: palette().panel })
-        .stroke({ width: 1.5, color: shade(color, -0.15), alpha: 0.85 });
-      this.cards.roundRect(x + 8, 2 + CARD_H / 2 - 4, 8, 8, 4).fill({ color });
+        .stroke({ width: 1, color: palette().frameEdge, alpha: 0.5 });
+      this.cards.roundRect(x + 9, 2 + CARD_H / 2 - 3.5, 7, 7, 3.5).fill({ color });
     }
     this.humanName.anchor.set(0, 0.5);
     this.humanName.position.set(left + 22, 2 + CARD_H / 2);
