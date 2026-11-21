@@ -195,8 +195,9 @@ export class Button extends Container {
     const g = this.face;
     g.removeChildren();
     this.sheenGfx = null;
-    const top = shade(base, this.pressed ? -0.04 : 0.17);
-    const bottom = shade(base, this.pressed ? -0.34 : -0.24);
+    // Светлые кнопки (дневная тема) — мягкий перепад, чтобы низ не серел.
+    const top = shade(base, this.pressed ? -0.03 : bright ? 0.12 : 0.17);
+    const bottom = shade(base, this.pressed ? (bright ? -0.2 : -0.34) : bright ? -0.09 : -0.24);
     const face = new Graphics();
     face
       .roundRect(0, 0, width, faceH, RADIUS)
