@@ -48,6 +48,7 @@ export function showDefinitionOverlay(app: Application, parent: Container, word:
   overlay.addChild(source);
   const btnClose = new Button({
     caption: 'Закрыть',
+    sfx: 'back',
     width: panelWidth - 30,
     height: 44,
     color: palette().panel,
@@ -142,6 +143,7 @@ export function showWordsOverlay(
   overlay.addChild(hint);
   const btnClose = new Button({
     caption: 'Закрыть',
+    sfx: 'back',
     width: panelWidth - 30,
     height: 46,
     color: palette().panel,
