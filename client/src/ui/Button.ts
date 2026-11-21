@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { FONT_FAMILY, palette, shade } from '../theme';
+import { FONT_FAMILY, luminance, palette, shade } from '../theme';
 import { sound } from '../audio/Sound';
 
 export interface ButtonOptions {
@@ -15,7 +15,7 @@ export interface ButtonOptions {
 }
 
 /** Толщина «нижней грани» кнопки (объём). */
-const LIP = 3;
+const LIP = 2;
 
 /**
  * Кнопка с объёмом: верхняя грань + тёмная нижняя кромка + блик.
@@ -41,7 +41,7 @@ export class Button extends Container {
         fontFamily: FONT_FAMILY,
         fontSize: options.fontSize ?? Math.max(14, Math.floor(options.height * 0.42)),
         fontWeight: '600',
-        fill: options.textColor ?? palette().text,
+        fill: options.textColor ?? Button.textOn(options.color ?? palette().accent),
       },
     });
     this.caption.anchor.set(0.5);
@@ -62,6 +62,11 @@ export class Button extends Container {
     });
   }
 
+  /** Цвет подписи: тёмные чернила на светлой (латунной) заливке, слоновая кость на тёмной. */
+  private static textOn(fill: number): number {
+    return luminance(fill) > 0.28 ? 0x1a1509 : palette().text;
+  }
+
   private layoutCaption(): void {
     this.caption.position.set(this.options.width / 2, (this.options.height - LIP) / 2);
   }
@@ -76,18 +81,22 @@ export class Button extends Container {
   private draw(): void {
     const { width, height } = this.options;
     const base = this.options.color ?? palette().accent;
+    const bright = luminance(base) > 0.28;
     const faceH = height - LIP;
-    const radius = Math.min(12, faceH / 2.4);
+    const radius = Math.min(11, faceH / 2.6);
     this.bg.clear();
-    // Нижняя кромка (тень кнопки) — статична, лицевая грань смещается при нажатии.
-    this.bg.roundRect(0, LIP, width, faceH, radius).fill({ color: shade(base, -0.42) });
-    const top = this.pressed ? shade(base, -0.08) : base;
+    // Тонкая тёмная кромка снизу: объём без глянца.
+    this.bg.roundRect(0, LIP, width, faceH, radius).fill({ color: 0x000000, alpha: 0.45 });
+    const top = this.pressed ? shade(base, -0.1) : base;
     const g = this.face;
     g.removeChildren();
     const face = new Graphics();
-    face.roundRect(0, 0, width, faceH, radius).fill({ color: top }).stroke({ width: 1, color: shade(base, 0.18), alpha: 0.7 });
-    // Блик по верхней кромке.
-    face.roundRect(2, 2, width - 4, Math.max(2, faceH * 0.42), Math.max(2, radius - 2)).fill({ color: 0xffffff, alpha: this.pressed ? 0.02 : 0.07 });
+    face.roundRect(0, 0, width, faceH, radius).fill({ color: top });
+    // Волосяная кромка: светлая у светлых кнопок, латунная у тёмных.
+    face
+      .roundRect(0.5, 0.5, width - 1, faceH - 1, radius)
+      .stroke({ width: 1, color: bright ? shade(base, 0.35) : palette().frameEdge, alpha: bright ? 0.8 : 0.55 });
+    this.caption.style.fill = this.options.textColor ?? Button.textOn(base);
     g.addChild(face, this.caption);
   }
 

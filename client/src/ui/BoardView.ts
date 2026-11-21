@@ -68,22 +68,22 @@ export class BoardView extends Container {
 
     const grid = new Graphics();
     const total = this.totalSize();
-    // Рама доски: тень, корпус, внутренняя кромка.
-    grid.roundRect(2, 5, total, total, 18).fill({ color: 0x000000, alpha: 0.35 });
-    grid
-      .roundRect(0, 0, total, total, 18)
-      .fill({ color: palette().panel })
-      .stroke({ width: 2, color: palette().panelBorder });
-    grid.roundRect(3, 3, total - 6, total - 6, 15).stroke({ width: 1, color: shade(palette().panelBorder, 0.25), alpha: 0.35 });
+    // Рама доски: мягкая тень, ореховый корпус, латунная волосяная кромка и сукно внутри.
+    grid.roundRect(0, 8, total, total, 20).fill({ color: 0x000000, alpha: 0.28 });
+    grid.roundRect(2, 5, total - 2, total, 20).fill({ color: 0x000000, alpha: 0.22 });
+    grid.roundRect(0, 0, total, total, 20).fill({ color: palette().frame });
+    grid.roundRect(0.5, 0.5, total - 1, total - 1, 20).stroke({ width: 1, color: palette().frameEdge, alpha: 0.85 });
+    grid.roundRect(3, 3, total - 6, total - 6, 17).stroke({ width: 1, color: 0x000000, alpha: 0.35 });
+    grid.roundRect(4, 4, total - 8, total - 8, 16).fill({ color: palette().cellEmpty, alpha: 0.55 });
     const slot = this.cellSize - 6;
     const radius = Math.max(6, Math.floor(slot * 0.14));
     for (let row = 0; row < this.boardSize; row++) {
       for (let col = 0; col < this.boardSize; col++) {
         const { x, y } = this.cellOrigin(row, col);
         // Утопленная ячейка: тёмное дно + светлая нижняя кромка.
-        grid.roundRect(x, y + 1, slot, slot, radius).fill({ color: 0xffffff, alpha: 0.05 });
+        grid.roundRect(x, y + 1, slot, slot, radius).fill({ color: palette().frameEdge, alpha: 0.12 });
         grid.roundRect(x, y, slot, slot, radius).fill({ color: palette().cellEmpty });
-        grid.roundRect(x, y, slot, slot, radius).stroke({ width: 1, color: 0x000000, alpha: 0.35 });
+        grid.roundRect(x, y, slot, slot, radius).stroke({ width: 1, color: 0x000000, alpha: 0.45 });
       }
     }
     this.overlay = new Graphics();
@@ -172,14 +172,12 @@ export class BoardView extends Container {
         view.position.set(x + size / 2, y + size / 2 - lip / 2);
 
         if (letter !== '' && !isNew) {
-          // Фишка: тень, нижняя грань, лицо и блик.
-          tiles.roundRect(x, y + lip + 2, size, size - lip, radius).fill({ color: 0x000000, alpha: 0.4 });
+          // Фишка из слоновой кости: двухслойная тень, нижняя грань, лицо, тонкая кромка.
+          tiles.roundRect(x - 1, y + lip + 3, size + 2, size - lip, radius + 1).fill({ color: 0x000000, alpha: 0.2 });
+          tiles.roundRect(x, y + lip + 1, size, size - lip, radius).fill({ color: 0x000000, alpha: 0.35 });
           tiles.roundRect(x, y + lip, size, size - lip, radius).fill({ color: palette().tileEdge });
           tiles.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell });
-          tiles
-            .roundRect(x + 2, y + 2, size - 4, Math.max(3, (size - lip) * 0.38), Math.max(3, radius - 2))
-            .fill({ color: 0xffffff, alpha: 0.35 });
-          tiles.roundRect(x, y, size, size - lip, radius).stroke({ width: 1, color: palette().cellBorder, alpha: 0.9 });
+          tiles.roundRect(x + 0.5, y + 0.5, size - 1, size - lip - 1, radius).stroke({ width: 1, color: palette().cellBorder, alpha: 0.85 });
         }
         if (isNew) {
           overlay.roundRect(x - 2, y - 2, size + 4, size + 4, radius + 2).stroke({ width: 6, color: palette().cellNew, alpha: 0.22 });
