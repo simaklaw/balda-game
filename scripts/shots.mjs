@@ -42,9 +42,11 @@ for (let y = 820; y > 450; y -= 10) {
 }
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-light.png` });
+await ctx.close();
 {
   const lctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const lp = await lctx.newPage();
+  lp.on('pageerror', (e) => console.log('LPAGEERROR', e.message));
   await lp.goto(url);
   await lp.waitForTimeout(12000);
   await lp.screenshot({ path: `shots/${P}land-menu.png` });
