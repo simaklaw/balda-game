@@ -49,6 +49,7 @@ async function bootstrap(): Promise<void> {
   document.body.appendChild(app.canvas);
   installAudioUnlock();
   document.body.style.background = cssBackground();
+  document.documentElement.style.background = cssBackground();
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
 
@@ -240,6 +241,7 @@ async function bootstrap(): Promise<void> {
             onThemeChange: () => {
               app.renderer.background.color = palette().bg;
               document.body.style.background = cssBackground();
+  document.documentElement.style.background = cssBackground();
               void adapter.storage.set('balda.theme', themeKind());
               showMenu();
             },

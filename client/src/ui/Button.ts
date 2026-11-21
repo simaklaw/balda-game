@@ -64,7 +64,7 @@ export class Button extends Container {
 
   /** Цвет подписи: тёмные чернила на светлой (латунной) заливке, слоновая кость на тёмной. */
   private static textOn(fill: number): number {
-    return luminance(fill) > 0.28 ? 0x1a1509 : palette().text;
+    return luminance(fill) > 0.28 ? 0x1a1509 : 0xf6efdc;
   }
 
   private layoutCaption(): void {
@@ -80,7 +80,7 @@ export class Button extends Container {
 
   private draw(): void {
     const { width, height } = this.options;
-    const base = this.options.color ?? palette().accent;
+    const base = this.enabled ? (this.options.color ?? palette().accent) : palette().panel;
     const bright = luminance(base) > 0.28;
     const faceH = height - LIP;
     const radius = Math.min(11, faceH / 2.6);
@@ -95,8 +95,8 @@ export class Button extends Container {
     // Волосяная кромка: светлая у светлых кнопок, латунная у тёмных.
     face
       .roundRect(0.5, 0.5, width - 1, faceH - 1, radius)
-      .stroke({ width: 1, color: bright ? shade(base, 0.35) : palette().frameEdge, alpha: bright ? 0.8 : 0.55 });
-    this.caption.style.fill = this.options.textColor ?? Button.textOn(base);
+      .stroke({ width: 1, color: bright ? shade(base, 0.3) : palette().frameEdge, alpha: bright ? 0.9 : 0.55 });
+    this.caption.style.fill = this.enabled ? (this.options.textColor ?? Button.textOn(base)) : palette().textDim;
     g.addChild(face, this.caption);
   }
 
@@ -126,7 +126,8 @@ export class Button extends Container {
 
   setEnabled(value: boolean): void {
     this.enabled = value;
-    this.alpha = value ? 1 : 0.45;
+    this.alpha = value ? 1 : 0.7;
     this.eventMode = value ? 'static' : 'none';
+    this.draw();
   }
 }

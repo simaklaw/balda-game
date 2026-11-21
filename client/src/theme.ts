@@ -59,7 +59,7 @@ export const DARK: Palette = {
 };
 
 export const LIGHT: Palette = {
-  bg: 0xece3cf,
+  bg: 0xd8ccae,
   panel: 0xf7f0df,
   panelBorder: 0xb9a572,
   accent: 0x1f5c47,
@@ -78,7 +78,7 @@ export const LIGHT: Palette = {
   player: 0x1f5c47,
   gold: 0xa77d1c,
   tileEdge: 0xc9b98c,
-  bgGlow: 0xf8f2e3,
+  bgGlow: 0xeadfc3,
   frame: 0x7b5a38,
   frameEdge: 0xb08a3e,
 };
