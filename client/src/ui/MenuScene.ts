@@ -481,6 +481,12 @@ export class MenuScene {
     const availH = Math.max(240, height - insets.top - insets.bottom);
     const availW = Math.max(208, width - insets.left - insets.right - 32);
     const ultra = availH < 440;
+    if (width > height && availH < 560) {
+      this.layoutLandscape(insets, width, availH);
+      return;
+    }
+    this.hint.visible = true;
+    this.subtitle.visible = true;
     const s = Math.min(1, Math.max(0.5, availH / 700));
 
     const diffW = Math.min(ROW_WIDTH, Math.floor((availW - ROW_GAP * 2) / 3));
@@ -579,10 +585,71 @@ export class MenuScene {
     this.btnPlay.position.set((width - 220) / 2, y);
   }
 
-  private layoutRow(buttons: Button[], buttonWidth: number, y: number): void {
-    const width = this.app.screen.width;
+  /** Горизонтальный экран: слева заголовок и настройки, справа кнопки и «Играть». */
+  private layoutLandscape(insets: { top: number; bottom: number; left: number; right: number }, width: number, availH: number): void {
+    const gap = 8;
+    const innerW = width - insets.left - insets.right - 32;
+    const colW = Math.min(400, Math.floor((innerW - 28) / 2));
+    const leftCx = insets.left + 16 + colW / 2;
+    const rightCx = width - insets.right - 16 - colW / 2;
+    const rowH = Math.max(30, Math.min(40, Math.floor(availH * 0.105)));
+    const labelFont = 13;
+    const labelH = labelFont + 4;
+    const titleFont = Math.max(34, Math.min(50, Math.floor(availH * 0.13)));
+
+    this.subtitle.visible = false;
+    this.hint.visible = false;
+    this.title.setSize(titleFont);
+    for (const label of [this.diffLabel, this.sizeLabel, this.timeLabel]) label.style.fontSize = labelFont;
+
+    const diffW = Math.floor((colW - ROW_GAP * 2) / 3);
+    const timeW = Math.floor((colW - ROW_GAP * 3) / 4);
+    for (const b of this.difficultyButtons) b.setWidth(diffW);
+    for (const b of this.sizeButtons) b.setWidth(diffW);
+    for (const b of this.timeButtons) b.setWidth(timeW);
+    for (const group of [this.difficultyButtons, this.sizeButtons, this.timeButtons]) {
+      for (const b of group) b.setHeight(rowH);
+    }
+
+    const leftH = titleFont + 12 + 3 * (labelH + rowH + 10);
+    let y = insets.top + Math.max(8, Math.floor((availH - leftH) / 2));
+    this.title.position.set(leftCx, y + titleFont / 2);
+    y += titleFont + 12;
+    const block = (label: Text, buttons: Button[], w: number): void => {
+      label.position.set(leftCx, y);
+      y += labelH;
+      this.layoutRow(buttons, w, y, leftCx);
+      y += rowH + 10;
+    };
+    block(this.diffLabel, this.difficultyButtons, diffW);
+    block(this.sizeLabel, this.sizeButtons, diffW);
+    block(this.timeLabel, this.timeButtons, timeW);
+
+    const btnH = Math.max(32, Math.min(42, Math.floor(availH * 0.11)));
+    const playH = Math.max(40, Math.min(54, Math.floor(availH * 0.14)));
+    for (const b of [this.btnTheme, this.btnSound, this.btnRules, this.btnLeaderboard, this.btnOnline]) b.setHeight(btnH);
+    this.btnPlay.setHeight(playH);
+    const rightH = btnH * 4 + playH + gap * 3 + 14;
+    let ry = insets.top + Math.max(8, Math.floor((availH - rightH) / 2));
+    const half = Math.floor((colW - gap) / 2);
+    this.btnTheme.setWidth(half);
+    this.btnSound.setWidth(half);
+    this.btnTheme.position.set(Math.round(rightCx - colW / 2), ry);
+    this.btnSound.position.set(Math.round(rightCx - colW / 2) + half + gap, ry);
+    ry += btnH + gap;
+    for (const b of [this.btnRules, this.btnLeaderboard, this.btnOnline]) {
+      b.setWidth(colW);
+      b.position.set(Math.round(rightCx - colW / 2), ry);
+      ry += btnH + gap;
+    }
+    ry += 6;
+    this.btnPlay.setWidth(colW);
+    this.btnPlay.position.set(Math.round(rightCx - colW / 2), ry);
+  }
+
+  private layoutRow(buttons: Button[], buttonWidth: number, y: number, cx: number = this.app.screen.width / 2): void {
     const total = buttons.length * buttonWidth + (buttons.length - 1) * ROW_GAP;
-    let x = Math.floor((width - total) / 2);
+    let x = Math.floor(cx - total / 2);
     for (const button of buttons) {
       button.position.set(x, y);
       x += buttonWidth + ROW_GAP;
