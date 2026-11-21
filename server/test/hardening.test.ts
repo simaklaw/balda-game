@@ -82,7 +82,9 @@ describe('стартовые слова', () => {
   it('pickStartWord выбирает слово из пула и уважает длину', () => {
     expect(START_WORDS[3]).toContain(pickStartWord(3, () => 0));
     expect(START_WORDS[5]).toContain(pickStartWord(5, () => 0.99));
-    expect(START_WORDS[7]).toContain(pickStartWord(7, () => 0.5));
+    // На 7×7 слово может быть и 5-буквенным (ставится по центру строки).
+    const w7 = pickStartWord(7, () => 0.5);
+    expect([...START_WORDS[7]!, ...START_WORDS[5]!]).toContain(w7);
     expect(() => pickStartWord(4)).toThrow();
   });
 
