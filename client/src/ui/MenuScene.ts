@@ -11,7 +11,7 @@ import { sound } from '../audio/Sound';
 
 export interface MenuSelection {
   difficulty: Difficulty;
-  boardSize: 3 | 5;
+  boardSize: 3 | 5 | 7;
   timeControl: TimeControlKind;
 }
 
@@ -30,7 +30,7 @@ const DIFFICULTIES: readonly { id: Difficulty; caption: string }[] = [
 const BOARD_SIZES: readonly { id: 3 | 5 | 7; caption: string; disabled: boolean }[] = [
   { id: 3, caption: '3×3', disabled: false },
   { id: 5, caption: '5×5', disabled: false },
-  { id: 7, caption: '7×7', disabled: true },
+  { id: 7, caption: '7×7', disabled: false },
 ];
 
 const TIME_CONTROLS: readonly { id: TimeControlKind; caption: string }[] = [
@@ -120,7 +120,7 @@ export class MenuScene {
   /** Строка о словаре в подвале меню («Словарь: 49 312 слов» / «Словарь: ограниченный»). */
   private readonly dictInfo: string;
   private difficulty: Difficulty = 'medium';
-  private boardSize: 3 | 5 = 5;
+  private boardSize: 3 | 5 | 7 = 7;
   private timeControl: TimeControlKind = 'classic';
 
   constructor(

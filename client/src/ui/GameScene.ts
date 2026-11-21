@@ -20,7 +20,7 @@ import { shouldReduceMotion } from '../perf';
 export interface GameSceneOptions {
   dawg: Dawg;
   difficulty: Difficulty;
-  boardSize: 3 | 5;
+  boardSize: 3 | 5 | 7;
   timeControl: TimeControlKind;
 }
 
