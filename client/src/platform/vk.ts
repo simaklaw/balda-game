@@ -97,7 +97,7 @@ export class VKAdapter implements PlatformAdapter {
       }
       try {
         await this.bridge.send('VKWebAppShare', {
-          link: buildInviteLink(window.location.href, roomId),
+          link: buildInviteLink(typeof window !== 'undefined' ? window.location.href : 'https://localhost/', roomId),
         });
         return true;
       } catch {
