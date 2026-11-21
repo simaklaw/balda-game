@@ -186,6 +186,7 @@ export class BoardView extends Container {
           tiles.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell });
           tiles.roundRect(x + 4, y + 4, size - 8, size - lip - 8, 1.5).stroke({ width: 1, color: palette().tileEdge, alpha: 0.55 });
           tiles.rect(x + 4, y + 4, 5, 5).fill({ color: palette().player });
+        }
         if (isNew) {
           overlay.roundRect(x - 2, y - 2, size + 4, size + 4, radius + 2).stroke({ width: 6, color: palette().cellNew, alpha: 0.22 });
           overlay.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell });
