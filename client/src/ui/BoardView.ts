@@ -77,6 +77,12 @@ export class BoardView extends Container {
     grid.roundRect(0.5, 0.5, total - 1, total - 1, 5).stroke({ width: 1, color: P.frameEdge, alpha: 0.9 });
     grid.rect(3, 3, total - 6, total - 6).fill({ color: P.cellEmpty });
     grid.rect(3.5, 3.5, total - 7, total - 7).stroke({ width: 1, color: 0x000000, alpha: 0.6 });
+    // Латунные уголки по краям рамы.
+    const arm = Math.min(22, total * 0.07);
+    for (const [cx, cy, sx, sy] of [[0, 0, 1, 1], [total, 0, -1, 1], [0, total, 1, -1], [total, total, -1, -1]] as const) {
+      grid.rect(cx + (sx > 0 ? 0 : -arm), cy + (sy > 0 ? 0 : -2), arm, 2).fill({ color: P.gold, alpha: 0.85 });
+      grid.rect(cx + (sx > 0 ? 0 : -2), cy + (sy > 0 ? 0 : -arm), 2, arm).fill({ color: P.gold, alpha: 0.85 });
+    }
     // Угловые винты рамы.
     for (const [cx, cy] of [[1.5, 1.5], [total - 1.5, 1.5], [1.5, total - 1.5], [total - 1.5, total - 1.5]] as const) {
       grid.circle(cx, cy, 0.9).fill({ color: P.frameEdge, alpha: 0.8 });
@@ -86,7 +92,10 @@ export class BoardView extends Container {
       for (let col = 0; col < this.boardSize; col++) {
         const { x, y } = this.cellOrigin(row, col);
         grid.roundRect(x, y, slot, slot, 3).fill({ color: shade(P.cellEmpty, -0.35) });
-        grid.roundRect(x + 0.5, y + 0.5, slot - 1, slot - 1, 3).stroke({ width: 1, color: P.frameEdge, alpha: 0.28 });
+        grid.roundRect(x + 0.5, y + 0.5, slot - 1, slot - 1, 3).stroke({ width: 1, color: P.frameEdge, alpha: 0.22 });
+        // Утопленное гнездо: тёмная тень сверху и тонкий отблеск снизу.
+        grid.rect(x + 2, y + 1, slot - 4, 4).fill({ color: 0x000000, alpha: 0.4 });
+        grid.rect(x + 3, y + slot - 2, slot - 6, 1).fill({ color: 0xffffff, alpha: 0.07 });
         // Реперный крест в центре пустого гнезда.
         const cx = x + slot / 2;
         const cy = y + slot / 2;
