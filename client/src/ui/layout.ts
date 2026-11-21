@@ -110,10 +110,10 @@ export function computeGameLayout(input: GameLayoutInput): GameLayout {
   const innerW = width - insets.left - insets.right;
   const innerH = height - insets.top - insets.bottom;
 
-  if (innerW > innerH && innerH >= 420) {
+  if (innerW > innerH && innerH >= 340) {
     return layoutLandscapeWide(input);
   }
-  if (innerW > innerH && innerH < 420) {
+  if (innerW > innerH && innerH < 340) {
     return layoutLandscapeCompact(input);
   }
   return layoutPortrait(input, keyboardHeight, controlCount);
