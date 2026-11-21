@@ -15,7 +15,7 @@ const before = await hash();
 for (let y = 820; y > 450; y -= 10) {
   await page.mouse.click(195, y);
   await page.waitForTimeout(700);
-  if ((await hash()) !== before) { console.log('changed at', y); break; }
+  if (await page.evaluate(() => !!window.__scene)) { console.log('started at', y); break; }
 }
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-dark.png` });
@@ -38,7 +38,7 @@ await page.screenshot({ path: `shots/${P}menu-light.png` });
 for (let y = 820; y > 450; y -= 10) {
   await page.mouse.click(195, y);
   await page.waitForTimeout(700);
-  if ((await hash()) !== before) { break; }
+  if (await page.evaluate(() => !!window.__scene)) { break; }
 }
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-light.png` });
