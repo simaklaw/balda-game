@@ -234,17 +234,17 @@ export class GameScene {
     }
     this.boardX = layout.boardX;
     this.boardView.position.set(layout.boardX, layout.boardY);
-    this.timerText.position.set(width / 2, layout.timerY);
-    this.wordPreview.position.set(width / 2, layout.wordPreviewY);
+    this.timerText.position.set(layout.timerX, layout.timerY);
+    this.wordPreview.position.set(layout.wordPreviewX, layout.wordPreviewY);
     const gap = layout.controlGap;
     const total = layout.controlWidth * 4 + gap * 3;
-    const startX = Math.floor((width - total) / 2);
+    const startX = layout.orientation === 'landscape-wide' ? layout.controlX : Math.floor((width - total) / 2);
     this.btnCancel.position.set(startX, layout.controlY);
     this.btnPass.position.set(startX + (layout.controlWidth + gap), layout.controlY);
     this.btnHistory.position.set(startX + (layout.controlWidth + gap) * 2, layout.controlY);
     this.btnOk.position.set(startX + (layout.controlWidth + gap) * 3, layout.controlY);
-    this.keyboard.setWidth(width);
-    this.keyboard.position.set(0, layout.keyboardY);
+    this.keyboard.setWidth(layout.keyboardWidth, layout.keyboardRows);
+    this.keyboard.position.set(layout.keyboardX, layout.keyboardY);
     // Оверлей конца партии перестраивается под новые размеры экрана.
     if (this.gameOverOverlay !== null) {
       this.view.removeChild(this.gameOverOverlay);

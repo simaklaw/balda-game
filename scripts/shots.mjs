@@ -57,5 +57,8 @@ await ctx.close();
   }
   await lp.waitForTimeout(1500);
   await lp.screenshot({ path: `shots/${P}land-game.png` });
+  await lp.evaluate(() => { const s = window.__scene; s.selection.tapCell(1, 2); s.keyboard.visible = s.selection.snapshot.phase === 'choosingLetter'; s.refresh(); });
+  await lp.waitForTimeout(600);
+  await lp.screenshot({ path: `shots/${P}land-keyboard.png` });
 }
 await browser.close();
