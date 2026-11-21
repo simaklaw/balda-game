@@ -39,6 +39,7 @@ export class BoardView extends Container {
   private cellSize: number;
   private overlay: Graphics;
   private tiles: Graphics;
+  private impact: Graphics = new Graphics();
   private letterViews: Text[][] = [];
   private cellGraphics: Graphics[][] = [];
 
@@ -95,7 +96,8 @@ export class BoardView extends Container {
     }
     this.overlay = new Graphics();
     this.tiles = new Graphics();
-    this.addChild(grid, this.tiles, this.overlay);
+    this.impact = new Graphics();
+    this.addChild(grid, this.tiles, this.overlay, this.impact);
 
     this.letterViews = [];
     this.cellGraphics = [];
@@ -149,6 +151,20 @@ export class BoardView extends Container {
   setPulse(row: number, col: number, scale: number): void {
     const view = this.letterViews[row]?.[col];
     if (view !== undefined) view.scale.set(scale);
+    // Оттиск: расходящееся киноварное кольцо вокруг только что поставленной литеры.
+    const g = this.impact;
+    g.clear();
+    if (scale > 1.002) {
+      const k = Math.min(1, (scale - 1) / 0.4);
+      const size = this.cellSize - 6;
+      const grow = (1 - k) * size * 0.35 + 2;
+      const { x, y } = this.cellOrigin(row, col);
+      g.roundRect(x - grow, y - grow, size + grow * 2, size + grow * 2, 6 + grow).stroke({
+        width: 2 + k * 2,
+        color: palette().cellNew,
+        alpha: Math.min(0.85, k * 0.9),
+      });
+    }
   }
 
   /** Update board: tiles, letters and highlights */

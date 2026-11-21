@@ -464,7 +464,12 @@ export class OnlineGameScene {
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
     const wordLabel = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
     if (!this.previewFits && wordLabel !== '') status = wordLabel;
-    this.hud.update(me.score, other.score, status);
+    this.hud.update(
+      me.score,
+      other.score,
+      status,
+      this.state.status === 'playing' ? (this.isMyTurn ? 'human' : 'opponent') : null,
+    );
     this.wordPreview.text = this.previewFits ? wordLabel : '';
     this.wordPreview.visible = this.previewFits && wordLabel !== '';
     this.boardView.sync(

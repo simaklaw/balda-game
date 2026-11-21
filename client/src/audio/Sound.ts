@@ -177,8 +177,11 @@ class SoundEngine {
         break;
       }
       case 'place':
-        this.tone(260, 0, 0.14, 0.2, { type: 'triangle', toFreq: 150 });
-        this.bell(19, 0.03, 0.35, 0.06);
+        // «Удар литеры»: глухой стук + сухой щелчок металла + тихий отзвук.
+        this.tone(150, 0, 0.12, 0.34, { type: 'sine', toFreq: 62 });
+        this.tone(1900, 0, 0.025, 0.1, { type: 'square', toFreq: 700 });
+        this.tone(320, 0.01, 0.09, 0.12, { type: 'triangle', toFreq: 180 });
+        this.bell(12, 0.05, 0.3, 0.045);
         break;
       case 'word': {
         // arg — длина слова: чем длиннее слово, тем богаче аккорд.

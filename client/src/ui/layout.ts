@@ -144,7 +144,9 @@ function layoutPortrait(
   }
 
   const boardPx = cellSize * boardSize;
-  const boardY = reservedTop;
+  // Доска по центру свободной области между HUD и клавиатурой (но не дальше 40 px вниз).
+  const freeH = height - reservedTop - reservedBottom;
+  const boardY = reservedTop + Math.max(0, Math.min(40, Math.floor((freeH - boardPx) / 2)));
   const boardX = Math.max(insets.left, Math.floor((width - boardPx) / 2));
   const controlGap = 8;
   const controlWidth = controlWidthFor(

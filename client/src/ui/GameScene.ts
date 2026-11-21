@@ -52,7 +52,7 @@ const ERROR_TEXT: Record<MoveErrorCode, string> = {
 const AI_MOVE_DELAY_MS = 700;
 /** Сколько показывать ход бота (подсветка пути + слово в статусе). */
 const AI_REVEAL_MS = 900;
-const POP_MS = 180;
+const POP_MS = 320;
 const SHAKE_MS = 320;
 
 function formatClock(ms: number): string {
@@ -153,6 +153,7 @@ export class GameScene {
     const controlHeight = 46;
     this.btnCancel = new Button({
       caption: 'Отмена',
+      icon: 'undo_2',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -161,6 +162,7 @@ export class GameScene {
     });
     this.btnPass = new Button({
       caption: 'Пропуск',
+      icon: 'skip_forward',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -169,6 +171,7 @@ export class GameScene {
     });
     this.btnHistory = new Button({
       caption: 'История',
+      icon: 'scroll_text',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -177,6 +180,7 @@ export class GameScene {
     });
     this.btnOk = new Button({
       caption: 'OK',
+      icon: 'check',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().accent,
@@ -317,7 +321,8 @@ export class GameScene {
         this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
         this.popCell = null;
       } else {
-        const scale = 1 + 0.16 * Math.sin(Math.PI * t);
+        // Оттиск литеры: сильный «удар» (1.4×) с быстрой посадкой и лёгким отскоком.
+        const scale = 1 + 0.4 * Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 0.9);
         this.boardView.setPulse(this.popCell.row, this.popCell.col, scale);
       }
     } else if (shouldReduceMotion() && this.popCell !== null && now - this.popStart >= POP_MS) {
@@ -489,7 +494,12 @@ export class GameScene {
     } else {
       status = 'Выделите слово и нажмите OK';
     }
-    this.hud.update(game.players[0]!.score, game.players[1]!.score, status);
+    this.hud.update(
+      game.players[0]!.score,
+      game.players[1]!.score,
+      status,
+      this.controller.isFinished ? null : this.controller.isHumanTurn ? 'human' : 'opponent',
+    );
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
     this.wordPreview.text = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
     this.boardView.sync(

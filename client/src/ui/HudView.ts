@@ -17,6 +17,7 @@ export class HudView extends Container {
   private readonly opponentScore: Text;
   private readonly status: Text;
   private width_ = 0;
+  private turn: 'human' | 'opponent' | null = null;
 
   constructor(width: number, labels: HudLabels = {}) {
     super();
@@ -51,6 +52,12 @@ export class HudView extends Container {
         .fill({ color: palette().panel })
         .stroke({ width: 1, color: palette().frameEdge, alpha: 0.5 });
       this.cards.rect(x + 9, 2 + CARD_H / 2 - 3.5, 7, 7).fill({ color });
+      // Чей ход: киноварная линия-«подчёркивание» по нижней кромке карточки.
+      const mine = x === left;
+      if ((mine && this.turn === 'human') || (!mine && this.turn === 'opponent')) {
+        this.cards.rect(x, 2 + CARD_H - 3, cardW, 3).fill({ color: palette().player });
+        this.cards.roundRect(x - 0.5, 1.5, cardW + 1, CARD_H + 1, 4).stroke({ width: 1.5, color: palette().player, alpha: 0.8 });
+      }
     }
     this.humanName.anchor.set(0, 0.5);
     this.humanName.position.set(left + 22, 2 + CARD_H / 2);
@@ -64,7 +71,11 @@ export class HudView extends Container {
     this.status.position.set(width / 2, CARD_H + 6);
   }
 
-  update(human: number, opponent: number, statusText: string): void {
+  update(human: number, opponent: number, statusText: string, turn: 'human' | 'opponent' | null = null): void {
+    if (turn !== this.turn) {
+      this.turn = turn;
+      this.layout(this.width_);
+    }
     this.humanScore.text = String(human);
     this.opponentScore.text = String(opponent);
     this.status.text = statusText;
