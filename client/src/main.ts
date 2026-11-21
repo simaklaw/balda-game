@@ -26,8 +26,28 @@ const cssBackground = (): string => pageBackground();
 const nextFrame = (): Promise<void> =>
   new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
+/** Шрифты лежат в public/fonts (OFL); при сбое остаётся запасной serif. */
+async function loadFonts(): Promise<void> {
+  const faces: Array<[string, string, FontFaceDescriptors]> = [
+    ['Plex Serif', 'PlexSerif-Bold.woff', { weight: '700' }],
+    ['Lora', 'Lora-Regular.woff', { weight: '400' }],
+    ['Lora', 'Lora-BoldItalic.woff', { weight: '700', style: 'italic' }],
+  ];
+  await Promise.all(
+    faces.map(async ([family, file, desc]) => {
+      try {
+        const face = new FontFace(family, `url(./fonts/${file})`, desc);
+        document.fonts.add(await face.load());
+      } catch {
+        /* запасной шрифт */
+      }
+    }),
+  );
+}
+
 async function bootstrap(): Promise<void> {
   const adapter = await createAdapter();
+  await loadFonts();
 
   try {
     const saved = await adapter.storage.get('balda.theme');
@@ -49,6 +69,7 @@ async function bootstrap(): Promise<void> {
   document.body.appendChild(app.canvas);
   installAudioUnlock();
   document.body.style.background = cssBackground();
+  document.documentElement.style.background = cssBackground();
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
 
@@ -240,6 +261,7 @@ async function bootstrap(): Promise<void> {
             onThemeChange: () => {
               app.renderer.background.color = palette().bg;
               document.body.style.background = cssBackground();
+  document.documentElement.style.background = cssBackground();
               void adapter.storage.set('balda.theme', themeKind());
               showMenu();
             },

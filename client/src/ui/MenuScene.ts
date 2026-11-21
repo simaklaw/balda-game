@@ -6,7 +6,7 @@ import type { LeaderboardEntry } from '../game/leaderboard';
 import type { LeaderboardRow } from '../platform/types';
 import { safeInsets } from './safeArea';
 import { Button } from './Button';
-import { FONT_FAMILY, LETTER_FONT, palette, setTheme, themeKind } from '../theme';
+import { FONT_FAMILY, LETTER_FONT, palette, setTheme, shade, themeKind } from '../theme';
 import { sound } from '../audio/Sound';
 
 export interface MenuSelection {
@@ -55,11 +55,52 @@ const TIME_ROW_WIDTH = 88;
 const ROW_GAP = 12;
 
 /** Экран главного меню: сложность, поле, контроль времени, онлайн, правила и тема. */
+/** Заголовок, набранный пятью литерами: каждая слегка скошена, как набрана вручную. */
+class TitleSorts extends Container {
+  private readonly word: string;
+  private size_ = 0;
+
+  constructor(word: string) {
+    super();
+    this.word = word;
+  }
+
+  setSize(size: number): void {
+    if (size === this.size_) return;
+    this.size_ = size;
+    for (const child of [...this.children]) child.destroy({ children: true });
+    const side = Math.round(size * 0.98);
+    const gap = Math.max(4, Math.round(size * 0.08));
+    const lip = Math.max(3, Math.round(side * 0.1));
+    const total = this.word.length * side + (this.word.length - 1) * gap;
+    const tilts = [-0.035, 0.025, -0.015, 0.03, -0.025];
+    [...this.word].forEach((ch, i) => {
+      const tile = new Container();
+      const g = new Graphics();
+      g.roundRect(-side / 2 - 1, -side / 2 + lip + 4, side + 2, side - lip, 4).fill({ color: 0x000000, alpha: 0.3 });
+      g.roundRect(-side / 2, -side / 2 + lip, side, side - lip, 3).fill({ color: palette().tileEdge });
+      g.roundRect(-side / 2, -side / 2, side, side - lip, 3).fill({ color: palette().cell });
+      g.roundRect(-side / 2 + 4, -side / 2 + 4, side - 8, side - lip - 8, 1.5).stroke({ width: 1, color: palette().tileEdge, alpha: 0.55 });
+      g.rect(-side / 2 + 4, -side / 2 + 4, 5, 5).fill({ color: palette().player });
+      const t = new Text({
+        text: ch,
+        style: { fontFamily: LETTER_FONT, fontSize: Math.round(side * 0.62), fontWeight: '700', fill: i === 4 ? shade(palette().accent, -0.1) : palette().letterText },
+      });
+      t.anchor.set(0.5);
+      t.position.set(0, -lip / 2);
+      tile.addChild(g, t);
+      tile.position.set(-total / 2 + side / 2 + i * (side + gap), 0);
+      tile.rotation = tilts[i % tilts.length]!;
+      this.addChild(tile);
+    });
+  }
+}
+
 export class MenuScene {
   readonly view = new Container();
   private readonly app: Application;
   private readonly callbacks: MenuSceneCallbacks;
-  private readonly title: Text;
+  private readonly title: TitleSorts;
   private readonly subtitle: Text;
   private readonly diffLabel: Text;
   private readonly sizeLabel: Text;
@@ -94,18 +135,7 @@ export class MenuScene {
     this.leaderboard = leaderboard;
     this.nativeTop = nativeTop;
     this.dictInfo = dictInfo;
-    this.title = new Text({
-      text: 'БАЛДА',
-      style: {
-        fontFamily: LETTER_FONT,
-        fontSize: 56,
-        fontWeight: '700',
-        fill: palette().gold,
-        letterSpacing: 8,
-        dropShadow: { color: 0x000000, alpha: 0.35, blur: 6, distance: 3, angle: Math.PI / 2 },
-      },
-    });
-    this.title.anchor.set(0.5);
+    this.title = new TitleSorts('БАЛДА');
     this.subtitle = new Text({
       text: 'словесная игра',
       style: { fontFamily: FONT_FAMILY, fontSize: 18, fill: palette().textDim },
@@ -464,7 +494,7 @@ export class MenuScene {
     // Строка о словаре добавляет вторую строку подсказки.
     const hintH = ultra ? 0 : this.dictInfo === '' ? 36 : 64;
 
-    this.title.style.fontSize = titleFont;
+    this.title.setSize(titleFont);
     this.subtitle.style.fontSize = subFont;
     this.subtitle.visible = !ultra;
     this.hint.visible = !ultra;

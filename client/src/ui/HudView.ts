@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { FONT_FAMILY, LETTER_FONT, palette } from '../theme';
+import { DISPLAY_FONT, FONT_FAMILY, palette } from '../theme';
 
 export interface HudLabels {
   human?: string;
@@ -23,7 +23,7 @@ export class HudView extends Container {
     const name = (text: string, color: number): Text =>
       new Text({ text, style: { fontFamily: FONT_FAMILY, fontSize: 13, fontWeight: '600', fill: color } });
     const score = (color: number): Text =>
-      new Text({ text: '0', style: { fontFamily: LETTER_FONT, fontSize: 24, fontWeight: '700', fill: color } });
+      new Text({ text: '0', style: { fontFamily: DISPLAY_FONT, fontSize: 26, fontWeight: '700', fontStyle: 'italic', fill: color } });
     this.humanName = name(labels.human ?? 'Вы', palette().player);
     this.opponentName = name(labels.opponent ?? 'Бот', palette().ai);
     this.humanScore = score(palette().text);
@@ -47,10 +47,10 @@ export class HudView extends Container {
       [right, palette().ai],
     ] as const) {
       this.cards
-        .roundRect(x, 2, cardW, CARD_H, 10)
+        .roundRect(x, 2, cardW, CARD_H, 4)
         .fill({ color: palette().panel })
         .stroke({ width: 1, color: palette().frameEdge, alpha: 0.5 });
-      this.cards.roundRect(x + 9, 2 + CARD_H / 2 - 3.5, 7, 7, 3.5).fill({ color });
+      this.cards.rect(x + 9, 2 + CARD_H / 2 - 3.5, 7, 7).fill({ color });
     }
     this.humanName.anchor.set(0, 0.5);
     this.humanName.position.set(left + 22, 2 + CARD_H / 2);

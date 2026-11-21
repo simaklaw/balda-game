@@ -33,54 +33,54 @@ export interface Palette {
 export type ThemeKind = 'dark' | 'light';
 
 export const DARK: Palette = {
-  // «Ночная партия»: изумрудное сукно, орех, латунь и слоновая кость.
-  bg: 0x08110d,
-  panel: 0x10201a,
-  panelBorder: 0x4a4326,
-  accent: 0xc9a24b,
-  accentDark: 0x8f7230,
-  ai: 0xdc8a5e,
-  cell: 0xf4ecd9,
-  cellBorder: 0xd8c9a3,
-  cellEmpty: 0x0c2219,
-  cellNew: 0x4fc08d,
-  cellPath: 0xe6c36e,
-  text: 0xf3ead6,
-  textDim: 0xa3b3a6,
-  letterText: 0x1d1810,
-  danger: 0xdb6a52,
-  success: 0x5fc98f,
-  player: 0xeadfc4,
-  gold: 0xe3c071,
-  tileEdge: 0xb8a574,
-  bgGlow: 0x143a2c,
-  frame: 0x3a281a,
-  frameEdge: 0xa98a43,
+  // «Типографская касса»: чёрная краска, бумага, киноварь, сталь.
+  bg: 0x0e0c0a,
+  panel: 0x1a1612,
+  panelBorder: 0x3d352b,
+  accent: 0xc8402b,
+  accentDark: 0x8c2a1b,
+  ai: 0xb9ae95,
+  cell: 0xece3cf,
+  cellBorder: 0xcfc3a6,
+  cellEmpty: 0x1c1814,
+  cellNew: 0xd2452e,
+  cellPath: 0xe0583f,
+  text: 0xefe6d2,
+  textDim: 0x9d927f,
+  letterText: 0x14110e,
+  danger: 0xff7a5c,
+  success: 0x9bbd7a,
+  player: 0xd9503a,
+  gold: 0xe0583f,
+  tileEdge: 0xa89b7c,
+  bgGlow: 0x211b15,
+  frame: 0x2b2620,
+  frameEdge: 0x7a705e,
 };
 
 export const LIGHT: Palette = {
-  bg: 0xece3cf,
-  panel: 0xf7f0df,
-  panelBorder: 0xb9a572,
-  accent: 0x1f5c47,
-  accentDark: 0x16443a,
-  ai: 0xb45a2e,
-  cell: 0xfffbef,
-  cellBorder: 0xcdbd93,
-  cellEmpty: 0x2d5c48,
-  cellNew: 0x1f9a67,
-  cellPath: 0xd6a73a,
-  text: 0x1c2a22,
-  textDim: 0x5d6a5f,
-  letterText: 0x1d1810,
-  danger: 0xb6452f,
-  success: 0x1f9a67,
-  player: 0x1f5c47,
-  gold: 0xa77d1c,
-  tileEdge: 0xc9b98c,
-  bgGlow: 0xf8f2e3,
-  frame: 0x7b5a38,
-  frameEdge: 0xb08a3e,
+  bg: 0xe2d8c0,
+  panel: 0xf6efde,
+  panelBorder: 0xbfb08e,
+  accent: 0xb8321f,
+  accentDark: 0x8a2316,
+  ai: 0x3b3631,
+  cell: 0xfbf6e8,
+  cellBorder: 0xd8cca9,
+  cellEmpty: 0x2a2520,
+  cellNew: 0xb8321f,
+  cellPath: 0xc9402b,
+  text: 0x1b1712,
+  textDim: 0x6e6454,
+  letterText: 0x14110e,
+  danger: 0xb6321f,
+  success: 0x4f7a3a,
+  player: 0xb8321f,
+  gold: 0xb8321f,
+  tileEdge: 0xc2b48f,
+  bgGlow: 0xf0e8d3,
+  frame: 0x4a4238,
+  frameEdge: 0x8a7d66,
 };
 
 let current: Palette = DARK;
@@ -99,10 +99,11 @@ export function setTheme(kind: ThemeKind): void {
 }
 
 /** Интерфейс: системный шрифт без загрузки файлов. */
-export const FONT_FAMILY =
-  'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+export const FONT_FAMILY = '"Lora", Georgia, "Times New Roman", serif';
 /** Буквы фишек и заголовок: «книжная» гарнитура, есть на всех платформах. */
-export const LETTER_FONT = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif';
+export const LETTER_FONT = '"Plex Serif", Georgia, "Times New Roman", serif';
+/** Заголовки и счёт: наклонный жирный Lora. */
+export const DISPLAY_FONT = '"Lora", Georgia, serif';
 
 /** Относительная яркость цвета 0..1 (для выбора цвета текста на заливке). */
 export function luminance(color: number): number {
