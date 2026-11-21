@@ -6,7 +6,7 @@ export interface LeaderboardEntry {
   /** Очки игрока за партию. */
   score: number;
   difficulty: Difficulty;
-  boardSize: 3 | 5;
+  boardSize: 3 | 5 | 7;
   timeControl: TimeControlKind;
   /** Момент завершения партии (ISO). */
   date: string;
@@ -27,7 +27,7 @@ const isDifficulty = (value: unknown): value is Difficulty =>
 const isTimeControl = (value: unknown): value is TimeControlKind =>
   typeof value === 'string' && (TIME_CONTROLS as readonly string[]).includes(value);
 
-const isBoardSize = (value: unknown): value is 3 | 5 => value === 3 || value === 5;
+const isBoardSize = (value: unknown): value is 3 | 5 | 7 => value === 3 || value === 5 || value === 7;
 
 /** Приводит неизвестное значение к записи рейтинга; мусор отбрасывает. */
 function normalizeEntry(item: unknown): LeaderboardEntry | null {

@@ -1,7 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import type { CellPos } from '@balda/shared';
-import { FONT_FAMILY, palette } from '../theme';
-import { shouldReduceMotion } from '../perf';
+import { LETTER_FONT, palette, shade } from '../theme';
 
 export interface BoardHighlight {
   newCell: CellPos | null;
@@ -39,6 +38,8 @@ export class BoardView extends Container {
   private readonly boardSize: number;
   private cellSize: number;
   private overlay: Graphics;
+  private tiles: Graphics;
+  private impact: Graphics = new Graphics();
   private letterViews: Text[][] = [];
   private cellGraphics: Graphics[][] = [];
 
@@ -47,6 +48,7 @@ export class BoardView extends Container {
     this.boardSize = boardSize;
     this.cellSize = cellSize;
     this.overlay = new Graphics();
+    this.tiles = new Graphics();
     this.build();
   }
 
@@ -66,21 +68,45 @@ export class BoardView extends Container {
     this.removeChildren();
 
     const grid = new Graphics();
-    grid
-      .roundRect(0, 0, this.totalSize(), this.totalSize(), 14)
-      .fill({ color: palette().panel })
-      .stroke({ width: 2, color: palette().panelBorder });
+    const total = this.totalSize();
+    const P = palette();
+    // Наборная касса: стальная рама, чёрное дно, прямоугольные гнёзда под литеры.
+    grid.rect(0, 10, total, total).fill({ color: 0x000000, alpha: 0.3 });
+    grid.rect(0, 5, total, total).fill({ color: 0x000000, alpha: 0.25 });
+    grid.roundRect(0, 0, total, total, 5).fill({ color: P.frame });
+    grid.roundRect(0.5, 0.5, total - 1, total - 1, 5).stroke({ width: 1, color: P.frameEdge, alpha: 0.9 });
+    grid.rect(3, 3, total - 6, total - 6).fill({ color: P.cellEmpty });
+    grid.rect(3.5, 3.5, total - 7, total - 7).stroke({ width: 1, color: 0x000000, alpha: 0.6 });
+    // Латунные уголки по краям рамы.
+    const arm = Math.min(22, total * 0.07);
+    for (const [cx, cy, sx, sy] of [[0, 0, 1, 1], [total, 0, -1, 1], [0, total, 1, -1], [total, total, -1, -1]] as const) {
+      grid.rect(cx + (sx > 0 ? 0 : -arm), cy + (sy > 0 ? 0 : -2), arm, 2).fill({ color: P.gold, alpha: 0.85 });
+      grid.rect(cx + (sx > 0 ? 0 : -2), cy + (sy > 0 ? 0 : -arm), 2, arm).fill({ color: P.gold, alpha: 0.85 });
+    }
+    // Угловые винты рамы.
+    for (const [cx, cy] of [[1.5, 1.5], [total - 1.5, 1.5], [1.5, total - 1.5], [total - 1.5, total - 1.5]] as const) {
+      grid.circle(cx, cy, 0.9).fill({ color: P.frameEdge, alpha: 0.8 });
+    }
+    const slot = this.cellSize - 6;
     for (let row = 0; row < this.boardSize; row++) {
       for (let col = 0; col < this.boardSize; col++) {
         const { x, y } = this.cellOrigin(row, col);
-        grid
-          .roundRect(x, y, this.cellSize - 6, this.cellSize - 6, 8)
-          .fill({ color: palette().cellEmpty })
-          .stroke({ width: 1, color: palette().panelBorder, alpha: 0.7 });
+        grid.roundRect(x, y, slot, slot, 3).fill({ color: shade(P.cellEmpty, -0.35) });
+        grid.roundRect(x + 0.5, y + 0.5, slot - 1, slot - 1, 3).stroke({ width: 1, color: P.frameEdge, alpha: 0.22 });
+        // Утопленное гнездо: тёмная тень сверху и тонкий отблеск снизу.
+        grid.rect(x + 2, y + 1, slot - 4, 4).fill({ color: 0x000000, alpha: 0.4 });
+        grid.rect(x + 3, y + slot - 2, slot - 6, 1).fill({ color: 0xffffff, alpha: 0.07 });
+        // Реперный крест в центре пустого гнезда.
+        const cx = x + slot / 2;
+        const cy = y + slot / 2;
+        grid.rect(cx - 4, cy - 0.5, 8, 1).fill({ color: P.frameEdge, alpha: 0.22 });
+        grid.rect(cx - 0.5, cy - 4, 1, 8).fill({ color: P.frameEdge, alpha: 0.22 });
       }
     }
     this.overlay = new Graphics();
-    this.addChild(grid, this.overlay);
+    this.tiles = new Graphics();
+    this.impact = new Graphics();
+    this.addChild(grid, this.tiles, this.overlay, this.impact);
 
     this.letterViews = [];
     this.cellGraphics = [];
@@ -91,8 +117,9 @@ export class BoardView extends Container {
         const letterView = new Text({
           text: '',
           style: {
-            fontFamily: FONT_FAMILY,
-            fontSize: Math.floor(this.cellSize * 0.5),
+            fontFamily: LETTER_FONT,
+            fontWeight: '700',
+            fontSize: Math.floor(this.cellSize * 0.54),
             fill: palette().letterText,
           },
         });
@@ -133,22 +160,36 @@ export class BoardView extends Container {
   setPulse(row: number, col: number, scale: number): void {
     const view = this.letterViews[row]?.[col];
     if (view !== undefined) view.scale.set(scale);
+    // Оттиск: расходящееся киноварное кольцо вокруг только что поставленной литеры.
+    const g = this.impact;
+    g.clear();
+    if (scale > 1.002) {
+      const k = Math.min(1, (scale - 1) / 0.4);
+      const size = this.cellSize - 6;
+      const grow = (1 - k) * size * 0.35 + 2;
+      const { x, y } = this.cellOrigin(row, col);
+      g.roundRect(x - grow, y - grow, size + grow * 2, size + grow * 2, 6 + grow).stroke({
+        width: 2 + k * 2,
+        color: palette().cellNew,
+        alpha: Math.min(0.85, k * 0.9),
+      });
+    }
   }
 
-  /** Update board: letters and highlights */
+  /** Update board: tiles, letters and highlights */
   sync(get: (row: number, col: number) => string, highlight: BoardHighlight = NO_HIGHLIGHT): void {
-    const reduceMotion = shouldReduceMotion();
     const size = this.cellSize - 6;
-    const overlay = this.overlay;
-
-    if (!reduceMotion) {
-      overlay.clear();
-    }
+    const radius = 3;
+    const lip = Math.max(4, Math.floor(size * 0.1));
+    const { overlay, tiles } = this;
+    overlay.clear();
+    tiles.clear();
 
     const inPath = (row: number, col: number): boolean =>
       highlight.path.some((c) => c.row === row && c.col === col);
     const inAiPath = (row: number, col: number): boolean =>
       highlight.aiPath.some((c) => c.row === row && c.col === col);
+    const gold = palette().gold;
 
     for (let row = 0; row < this.boardSize; row++) {
       for (let col = 0; col < this.boardSize; col++) {
@@ -158,48 +199,45 @@ export class BoardView extends Container {
         const letter = isNew ? (highlight.previewLetter ?? '') : get(row, col);
         view.text = letter.toUpperCase();
         view.visible = letter !== '';
-        view.style.fill = isNew ? palette().cellNew : palette().letterText;
-
+        view.style.fill = isNew
+          ? shade(palette().cellNew, -0.35)
+          : inPath(row, col)
+            ? palette().cell
+            : palette().letterText;
         const { x, y } = this.cellOrigin(row, col);
+        view.position.set(x + size / 2, y + size / 2 - lip / 2);
 
-        if (!reduceMotion) {
-          if (isNew) {
-            overlay
-              .roundRect(x, y, size, size, 8)
-              .fill({ color: palette().cell, alpha: 0.9 })
-              .stroke({ width: 3, color: palette().cellNew });
-          } else if (inPath(row, col)) {
-            overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cellPath, alpha: 0.28 });
-          }
-          if (
-            highlight.aiCell !== null &&
-            highlight.aiCell.row === row &&
-            highlight.aiCell.col === col &&
-            !isNew
-          ) {
-            overlay.roundRect(x, y, size, size, 8).stroke({ width: 3, color: palette().ai });
-          } else if (inAiPath(row, col) && !isNew) {
-            overlay
-              .roundRect(x, y, size, size, 8)
-              .stroke({ width: 2, color: palette().ai, alpha: 0.6 });
-          }
-          if (
-            highlight.showPlaceable &&
-            letter === '' &&
-            !isNew &&
-            this.hasLetteredNeighbor(get, row, col)
-          ) {
-            overlay.roundRect(x, y, size, size, 8).fill({ color: palette().cell, alpha: 0.4 });
-            const cx = x + size / 2;
-            const cy = y + size / 2;
-            const arm = Math.max(7, Math.floor(size * 0.16));
-            overlay
-              .rect(cx - arm, cy - 2, arm * 2, 4)
-              .fill({ color: palette().textDim, alpha: 0.55 });
-            overlay
-              .rect(cx - 2, cy - arm, 4, arm * 2)
-              .fill({ color: palette().textDim, alpha: 0.55 });
-          }
+        if (letter !== '' && !isNew) {
+          // Литера: тень, боковая грань (высота шрифта), бумажное лицо, печатная рамка и киноварная метка.
+          tiles.roundRect(x - 1, y + lip + 3, size + 2, size - lip, radius + 1).fill({ color: 0x000000, alpha: 0.25 });
+          tiles.roundRect(x, y + lip + 1, size, size - lip, radius).fill({ color: 0x000000, alpha: 0.4 });
+          tiles.roundRect(x, y + lip, size, size - lip, radius).fill({ color: palette().tileEdge });
+          tiles.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell });
+          tiles.roundRect(x + 4, y + 4, size - 8, size - lip - 8, 1.5).stroke({ width: 1, color: palette().tileEdge, alpha: 0.55 });
+          tiles.rect(x + 4, y + 4, 5, 5).fill({ color: palette().player });
+        }
+        if (isNew) {
+          overlay.roundRect(x - 2, y - 2, size + 4, size + 4, radius + 2).stroke({ width: 6, color: palette().cellNew, alpha: 0.22 });
+          overlay.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell });
+          overlay.roundRect(x, y, size, size - lip, radius).stroke({ width: 3, color: palette().cellNew });
+        } else if (inPath(row, col)) {
+          overlay.roundRect(x, y, size, size - lip, radius).fill({ color: shade(gold, -0.12) });
+          overlay.roundRect(x + 4, y + 4, size - 8, size - lip - 8, 1.5).stroke({ width: 1, color: palette().cell, alpha: 0.5 });
+        }
+        if (highlight.aiCell !== null && highlight.aiCell.row === row && highlight.aiCell.col === col && !isNew) {
+          overlay.roundRect(x - 1, y - 1, size + 2, size - lip + 2, radius).stroke({ width: 3.5, color: palette().ai });
+        } else if (inAiPath(row, col) && !isNew) {
+          overlay.roundRect(x, y, size, size - lip, radius).fill({ color: palette().ai, alpha: 0.2 });
+          overlay.roundRect(x, y, size, size - lip, radius).stroke({ width: 2, color: palette().ai, alpha: 0.75 });
+        }
+        if (highlight.showPlaceable && letter === '' && !isNew && this.hasLetteredNeighbor(get, row, col)) {
+          const cx = x + size / 2;
+          const cy = y + size / 2;
+          const arm = Math.max(7, Math.floor(size * 0.15));
+          overlay.roundRect(x, y, size, size, radius).fill({ color: gold, alpha: 0.07 });
+          overlay.roundRect(x + 2, y + 2, size - 4, size - 4, Math.max(4, radius - 2)).stroke({ width: 1.5, color: gold, alpha: 0.35 });
+          overlay.rect(cx - arm, cy - 1.5, arm * 2, 3).fill({ color: gold, alpha: 0.75 });
+          overlay.rect(cx - 1.5, cy - arm, 3, arm * 2).fill({ color: gold, alpha: 0.75 });
         }
       }
     }

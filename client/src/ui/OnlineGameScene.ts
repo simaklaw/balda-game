@@ -6,6 +6,7 @@ import type { NetClient } from '../net/NetClient';
 import type { RoomState, ServerMessage } from '../net/protocol';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
+import { sound } from '../audio/Sound';
 import { showWordsOverlay } from './DefinitionOverlay';
 import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
@@ -134,7 +135,9 @@ export class OnlineGameScene {
       controlCount: 4,
     });
 
-    this.hud = new HudView(app.screen.width, { human: 'Вы', opponent: 'Соперник' });
+    const meInit = initialState.players[initialState.you]?.name;
+    const otherInit = initialState.players[initialState.you === 0 ? 1 : 0]?.name;
+    this.hud = new HudView(app.screen.width, { human: meInit ?? 'Вы', opponent: otherInit ?? 'Соперник' });
     this.view.addChild(this.hud);
     // Нажатие на панель игроков — список слов партии и толкования (Викисловарь).
     this.hud.eventMode = 'static';
@@ -267,7 +270,7 @@ export class OnlineGameScene {
   private stageMove = (e: { global: { x: number; y: number } }): void => {
     if (!this.dragActive || this.selection.snapshot.phase !== 'building') return;
     const cell = this.hitCell(e.global.x, e.global.y);
-    if (cell) this.selection.extendPath(cell.row, cell.col);
+    if (cell && this.selection.extendPath(cell.row, cell.col)) sound.play('select', this.selection.snapshot.path.length - 1);
     this.refresh();
   };
 
@@ -301,9 +304,9 @@ export class OnlineGameScene {
     if (!cell) return;
     const phase = this.selection.snapshot.phase;
     if (phase === 'building') {
-      this.selection.extendPath(cell.row, cell.col);
+      if (this.selection.extendPath(cell.row, cell.col)) sound.play('select', this.selection.snapshot.path.length - 1);
     } else {
-      this.selection.tapCell(cell.row, cell.col);
+      if (this.selection.tapCell(cell.row, cell.col)) sound.play('tap');
       this.keyboard.visible = this.selection.snapshot.phase === 'choosingLetter';
     }
     this.refresh();
@@ -350,6 +353,7 @@ export class OnlineGameScene {
 
   private onLetter(letter: string): void {
     if (this.selection.chooseLetter(letter)) {
+      sound.play('place');
       this.keyboard.visible = false;
       this.refresh();
     }
@@ -357,6 +361,7 @@ export class OnlineGameScene {
 
   private handleMessage(msg: ServerMessage): void {
     if (msg.type === 'error') {
+      sound.play('error');
       this.triggerShake();
       this.refresh(msg.message);
       return;
@@ -383,11 +388,16 @@ export class OnlineGameScene {
     this.state = state;
     this.board.update(state);
     this.historyLen = state.history.length;
+    if (state.history.length > prevLen) {
+      const mine = state.history[state.history.length - 1];
+      if (mine !== undefined && mine.player === prevYou) sound.play('word', mine.word.length);
+    }
     if (state.history.length > prevLen && state.currentPlayer === state.you) {
       const last = state.history[state.history.length - 1];
       if (last !== undefined && last.player !== prevYou) {
         this.opponentCell = { row: last.cell.row, col: last.cell.col };
         this.startPop(last.cell);
+        sound.play('opponent');
         if (this.opponentTimer !== null) clearTimeout(this.opponentTimer);
         this.opponentTimer = setTimeout(() => {
           this.opponentTimer = null;
@@ -456,7 +466,12 @@ export class OnlineGameScene {
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
     const wordLabel = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
     if (!this.previewFits && wordLabel !== '') status = wordLabel;
-    this.hud.update(me.score, other.score, status);
+    this.hud.update(
+      me.score,
+      other.score,
+      status,
+      this.state.status === 'playing' ? (this.isMyTurn ? 'human' : 'opponent') : null,
+    );
     this.wordPreview.text = this.previewFits ? wordLabel : '';
     this.wordPreview.visible = this.previewFits && wordLabel !== '';
     this.boardView.sync(
@@ -503,6 +518,7 @@ export class OnlineGameScene {
     if (this.gameOverShown) return;
     this.gameOverShown = true;
     const you = this.state.you;
+    sound.play(msg.winner === null ? 'draw' : msg.winner === you ? 'win' : 'lose');
     const winner = msg.winner;
     const over = gameOverText(winner === null ? null : winner === you ? 0 : 1, msg.reason);
     const titleColor =

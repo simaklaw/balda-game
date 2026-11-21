@@ -29,6 +29,24 @@ export interface PlatformLeaderboards {
   getTopScores(limit?: number): Promise<LeaderboardRow[] | null>;
 }
 
+/** Профиль игрока на площадке: имя и аватар (если площадка их отдаёт). */
+export interface PlatformProfile {
+  /** Стабильный id игрока на площадке (если есть). */
+  id: string | null;
+  name: string;
+  /** https-ссылка на аватар или null. */
+  avatarUrl: string | null;
+}
+
+/**
+ * Социальные возможности площадки (VK/OK, браузерный share): пригласить
+ * друга в комнату. Платформы без такого API (Яндекс Игры) поле не задают.
+ */
+export interface PlatformSocial {
+  /** Пригласить друга сыграть в комнате roomId; true — окно показано/ссылка отправлена. */
+  invite(roomId: string): Promise<boolean>;
+}
+
 /**
  * Абстракция платформы: веб, Яндекс Игры, VK Mini Apps, Telegram WebApp,
  * позже OK. Игровой код общается только с этим интерфейсом — конкретная
@@ -40,6 +58,10 @@ export interface PlatformAdapter {
   ready(): Promise<void>;
   /** Имя игрока или null (не авторизован / площадка не поддерживает). */
   getPlayerName(): Promise<string | null>;
+  /** Имя и аватар игрока; null — площадка их не отдаёт. */
+  getProfile?(): Promise<PlatformProfile | null>;
+  /** Приглашение друзей (только площадки с таким API). */
+  readonly social?: PlatformSocial;
   /** Межстраничная реклама между партиями; резолвится после закрытия. */
   showInterstitial(): Promise<void>;
   storage: PlatformStorage;

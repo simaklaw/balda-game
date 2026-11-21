@@ -6,11 +6,12 @@ import type { LeaderboardEntry } from '../game/leaderboard';
 import type { LeaderboardRow } from '../platform/types';
 import { safeInsets } from './safeArea';
 import { Button } from './Button';
-import { FONT_FAMILY, palette, setTheme, themeKind } from '../theme';
+import { FONT_FAMILY, LETTER_FONT, palette, setTheme, shade, themeKind } from '../theme';
+import { sound } from '../audio/Sound';
 
 export interface MenuSelection {
   difficulty: Difficulty;
-  boardSize: 3 | 5;
+  boardSize: 3 | 5 | 7;
   timeControl: TimeControlKind;
 }
 
@@ -29,7 +30,7 @@ const DIFFICULTIES: readonly { id: Difficulty; caption: string }[] = [
 const BOARD_SIZES: readonly { id: 3 | 5 | 7; caption: string; disabled: boolean }[] = [
   { id: 3, caption: '3×3', disabled: false },
   { id: 5, caption: '5×5', disabled: false },
-  { id: 7, caption: '7×7', disabled: true },
+  { id: 7, caption: '7×7', disabled: false },
 ];
 
 const TIME_CONTROLS: readonly { id: TimeControlKind; caption: string }[] = [
@@ -54,11 +55,52 @@ const TIME_ROW_WIDTH = 88;
 const ROW_GAP = 12;
 
 /** Экран главного меню: сложность, поле, контроль времени, онлайн, правила и тема. */
+/** Заголовок, набранный пятью литерами: каждая слегка скошена, как набрана вручную. */
+class TitleSorts extends Container {
+  private readonly word: string;
+  private size_ = 0;
+
+  constructor(word: string) {
+    super();
+    this.word = word;
+  }
+
+  setSize(size: number): void {
+    if (size === this.size_) return;
+    this.size_ = size;
+    for (const child of [...this.children]) child.destroy({ children: true });
+    const side = Math.round(size * 0.98);
+    const gap = Math.max(4, Math.round(size * 0.08));
+    const lip = Math.max(3, Math.round(side * 0.1));
+    const total = this.word.length * side + (this.word.length - 1) * gap;
+    const tilts = [-0.035, 0.025, -0.015, 0.03, -0.025];
+    [...this.word].forEach((ch, i) => {
+      const tile = new Container();
+      const g = new Graphics();
+      g.roundRect(-side / 2 - 1, -side / 2 + lip + 4, side + 2, side - lip, 4).fill({ color: 0x000000, alpha: 0.3 });
+      g.roundRect(-side / 2, -side / 2 + lip, side, side - lip, 3).fill({ color: palette().tileEdge });
+      g.roundRect(-side / 2, -side / 2, side, side - lip, 3).fill({ color: palette().cell });
+      g.roundRect(-side / 2 + 4, -side / 2 + 4, side - 8, side - lip - 8, 1.5).stroke({ width: 1, color: palette().tileEdge, alpha: 0.55 });
+      g.rect(-side / 2 + 4, -side / 2 + 4, 5, 5).fill({ color: palette().player });
+      const t = new Text({
+        text: ch,
+        style: { fontFamily: LETTER_FONT, fontSize: Math.round(side * 0.62), fontWeight: '700', fill: i === 4 ? shade(palette().accent, -0.1) : palette().letterText },
+      });
+      t.anchor.set(0.5);
+      t.position.set(0, -lip / 2);
+      tile.addChild(g, t);
+      tile.position.set(-total / 2 + side / 2 + i * (side + gap), 0);
+      tile.rotation = tilts[i % tilts.length]!;
+      this.addChild(tile);
+    });
+  }
+}
+
 export class MenuScene {
   readonly view = new Container();
   private readonly app: Application;
   private readonly callbacks: MenuSceneCallbacks;
-  private readonly title: Text;
+  private readonly title: TitleSorts;
   private readonly subtitle: Text;
   private readonly diffLabel: Text;
   private readonly sizeLabel: Text;
@@ -68,6 +110,7 @@ export class MenuScene {
   private readonly sizeButtons: Button[] = [];
   private readonly timeButtons: Button[] = [];
   private readonly btnTheme: Button;
+  private readonly btnSound: Button;
   private readonly btnLeaderboard: Button;
   private readonly btnRules: Button;
   private readonly btnOnline: Button;
@@ -77,7 +120,7 @@ export class MenuScene {
   /** Строка о словаре в подвале меню («Словарь: 49 312 слов» / «Словарь: ограниченный»). */
   private readonly dictInfo: string;
   private difficulty: Difficulty = 'medium';
-  private boardSize: 3 | 5 = 5;
+  private boardSize: 3 | 5 | 7 = 5;
   private timeControl: TimeControlKind = 'classic';
 
   constructor(
@@ -92,11 +135,7 @@ export class MenuScene {
     this.leaderboard = leaderboard;
     this.nativeTop = nativeTop;
     this.dictInfo = dictInfo;
-    this.title = new Text({
-      text: 'БАЛДА',
-      style: { fontFamily: FONT_FAMILY, fontSize: 56, fill: palette().text },
-    });
-    this.title.anchor.set(0.5);
+    this.title = new TitleSorts('БАЛДА');
     this.subtitle = new Text({
       text: 'словесная игра',
       style: { fontFamily: FONT_FAMILY, fontSize: 18, fill: palette().textDim },
@@ -187,11 +226,12 @@ export class MenuScene {
     }
 
     this.btnTheme = new Button({
-      caption: 'Тема: ' + (themeKind() === 'dark' ? 'тёмная' : 'светлая'),
-      width: 200,
+      caption: 'Тема',
+      icon: themeKind() === 'dark' ? 'moon' : 'sun',
+      width: 94,
       height: 44,
       color: palette().panel,
-      fontSize: 16,
+      fontSize: 15,
       onTap: () => {
         const next = themeKind() === 'dark' ? 'light' : 'dark';
         setTheme(next);
@@ -205,8 +245,25 @@ export class MenuScene {
     });
     this.view.addChild(this.btnTheme);
 
+    this.btnSound = new Button({
+      caption: 'Звук',
+      icon: sound.enabled ? 'volume_2' : 'volume_x',
+      width: 94,
+      height: 44,
+      color: palette().panel,
+      fontSize: 15,
+      sfx: 'none',
+      onTap: () => {
+        sound.setEnabled(!sound.enabled);
+        this.btnSound.setIcon(sound.enabled ? 'volume_2' : 'volume_x');
+        if (sound.enabled) sound.play('word', 4);
+      },
+    });
+    this.view.addChild(this.btnSound);
+
     this.btnRules = new Button({
       caption: 'Правила',
+      icon: 'book_open',
       width: 200,
       height: 44,
       color: palette().panel,
@@ -217,6 +274,7 @@ export class MenuScene {
 
     this.btnLeaderboard = new Button({
       caption: 'Рейтинг',
+      icon: 'trophy',
       width: 200,
       height: 44,
       color: palette().panel,
@@ -227,6 +285,7 @@ export class MenuScene {
 
     this.btnOnline = new Button({
       caption: 'Онлайн',
+      icon: 'globe',
       width: 220,
       height: 44,
       color: palette().panel,
@@ -239,6 +298,7 @@ export class MenuScene {
 
     this.btnPlay = new Button({
       caption: 'Играть',
+      icon: 'play',
       width: 220,
       height: 56,
       fontSize: 24,
@@ -421,6 +481,12 @@ export class MenuScene {
     const availH = Math.max(240, height - insets.top - insets.bottom);
     const availW = Math.max(208, width - insets.left - insets.right - 32);
     const ultra = availH < 440;
+    if (width > height && availH < 560) {
+      this.layoutLandscape(insets, width, availH);
+      return;
+    }
+    this.hint.visible = true;
+    this.subtitle.visible = true;
     const s = Math.min(1, Math.max(0.5, availH / 700));
 
     const diffW = Math.min(ROW_WIDTH, Math.floor((availW - ROW_GAP * 2) / 3));
@@ -438,9 +504,9 @@ export class MenuScene {
     const blockGap = ultra ? 10 : Math.round(18 * s) + 6;
     const titleBlock = ultra ? titleFont + 4 : titleFont + 6 + subFont + Math.round(16 * s) + 8;
     // Строка о словаре добавляет вторую строку подсказки.
-    const hintH = ultra ? 0 : this.dictInfo === '' ? 36 : 52;
+    const hintH = ultra ? 0 : this.dictInfo === '' ? 36 : 64;
 
-    this.title.style.fontSize = titleFont;
+    this.title.setSize(titleFont);
     this.subtitle.style.fontSize = subFont;
     this.subtitle.visible = !ultra;
     this.hint.visible = !ultra;
@@ -454,6 +520,7 @@ export class MenuScene {
       for (const button of group) button.setHeight(rowH);
     }
     this.btnTheme.setHeight(themeH);
+    this.btnSound.setHeight(themeH);
     this.btnRules.setHeight(rulesH);
     this.btnLeaderboard.setHeight(leaderboardH);
     this.btnOnline.setHeight(onlineH);
@@ -499,8 +566,11 @@ export class MenuScene {
       this.hint.position.set(width / 2, y + 2);
     }
     y += hintH;
-    this.btnTheme.setWidth(200);
-    this.btnTheme.position.set((width - 200) / 2, y);
+    const halfW = Math.min(94, Math.floor((availW - ROW_GAP) / 2));
+    this.btnTheme.setWidth(halfW);
+    this.btnSound.setWidth(halfW);
+    this.btnTheme.position.set(Math.floor((width - (halfW * 2 + ROW_GAP)) / 2), y);
+    this.btnSound.position.set(Math.floor((width - (halfW * 2 + ROW_GAP)) / 2) + halfW + ROW_GAP, y);
     y += themeH + 10;
     this.btnRules.setWidth(200);
     this.btnRules.position.set((width - 200) / 2, y);
@@ -515,10 +585,71 @@ export class MenuScene {
     this.btnPlay.position.set((width - 220) / 2, y);
   }
 
-  private layoutRow(buttons: Button[], buttonWidth: number, y: number): void {
-    const width = this.app.screen.width;
+  /** Горизонтальный экран: слева заголовок и настройки, справа кнопки и «Играть». */
+  private layoutLandscape(insets: { top: number; bottom: number; left: number; right: number }, width: number, availH: number): void {
+    const gap = 8;
+    const innerW = width - insets.left - insets.right - 32;
+    const colW = Math.min(400, Math.floor((innerW - 28) / 2));
+    const leftCx = insets.left + 16 + colW / 2;
+    const rightCx = width - insets.right - 16 - colW / 2;
+    const rowH = Math.max(30, Math.min(40, Math.floor(availH * 0.105)));
+    const labelFont = 13;
+    const labelH = labelFont + 4;
+    const titleFont = Math.max(34, Math.min(50, Math.floor(availH * 0.13)));
+
+    this.subtitle.visible = false;
+    this.hint.visible = false;
+    this.title.setSize(titleFont);
+    for (const label of [this.diffLabel, this.sizeLabel, this.timeLabel]) label.style.fontSize = labelFont;
+
+    const diffW = Math.floor((colW - ROW_GAP * 2) / 3);
+    const timeW = Math.floor((colW - ROW_GAP * 3) / 4);
+    for (const b of this.difficultyButtons) b.setWidth(diffW);
+    for (const b of this.sizeButtons) b.setWidth(diffW);
+    for (const b of this.timeButtons) b.setWidth(timeW);
+    for (const group of [this.difficultyButtons, this.sizeButtons, this.timeButtons]) {
+      for (const b of group) b.setHeight(rowH);
+    }
+
+    const leftH = titleFont + 12 + 3 * (labelH + rowH + 10);
+    let y = insets.top + Math.max(8, Math.floor((availH - leftH) / 2));
+    this.title.position.set(leftCx, y + titleFont / 2);
+    y += titleFont + 12;
+    const block = (label: Text, buttons: Button[], w: number): void => {
+      label.position.set(leftCx, y);
+      y += labelH;
+      this.layoutRow(buttons, w, y, leftCx);
+      y += rowH + 10;
+    };
+    block(this.diffLabel, this.difficultyButtons, diffW);
+    block(this.sizeLabel, this.sizeButtons, diffW);
+    block(this.timeLabel, this.timeButtons, timeW);
+
+    const btnH = Math.max(32, Math.min(42, Math.floor(availH * 0.11)));
+    const playH = Math.max(40, Math.min(54, Math.floor(availH * 0.14)));
+    for (const b of [this.btnTheme, this.btnSound, this.btnRules, this.btnLeaderboard, this.btnOnline]) b.setHeight(btnH);
+    this.btnPlay.setHeight(playH);
+    const rightH = btnH * 4 + playH + gap * 3 + 14;
+    let ry = insets.top + Math.max(8, Math.floor((availH - rightH) / 2));
+    const half = Math.floor((colW - gap) / 2);
+    this.btnTheme.setWidth(half);
+    this.btnSound.setWidth(half);
+    this.btnTheme.position.set(Math.round(rightCx - colW / 2), ry);
+    this.btnSound.position.set(Math.round(rightCx - colW / 2) + half + gap, ry);
+    ry += btnH + gap;
+    for (const b of [this.btnRules, this.btnLeaderboard, this.btnOnline]) {
+      b.setWidth(colW);
+      b.position.set(Math.round(rightCx - colW / 2), ry);
+      ry += btnH + gap;
+    }
+    ry += 6;
+    this.btnPlay.setWidth(colW);
+    this.btnPlay.position.set(Math.round(rightCx - colW / 2), ry);
+  }
+
+  private layoutRow(buttons: Button[], buttonWidth: number, y: number, cx: number = this.app.screen.width / 2): void {
     const total = buttons.length * buttonWidth + (buttons.length - 1) * ROW_GAP;
-    let x = Math.floor((width - total) / 2);
+    let x = Math.floor(cx - total / 2);
     for (const button of buttons) {
       button.position.set(x, y);
       x += buttonWidth + ROW_GAP;

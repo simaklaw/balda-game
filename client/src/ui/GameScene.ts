@@ -1,4 +1,5 @@
 import { Application, Container, FederatedPointerEvent, Graphics, Text } from 'pixi.js';
+import type { Texture } from 'pixi.js';
 import type { CellPos, Dawg, Difficulty, MoveErrorCode } from '@balda/shared';
 import { defaultConfigFor, pickStartWord } from '@balda/shared';
 import { LocalGameController } from '../game/LocalGameController';
@@ -8,6 +9,7 @@ import type { TimeControlKind } from '../game/TimerModel';
 import { showDefinitionOverlay } from './DefinitionOverlay';
 import { BoardView } from './BoardView';
 import { Button } from './Button';
+import { sound } from '../audio/Sound';
 import { gameOverText } from './gameOverText';
 import { HudView } from './HudView';
 import { computeGameLayout, keyboardMetricsFor } from './layout';
@@ -19,8 +21,11 @@ import { shouldReduceMotion } from '../perf';
 export interface GameSceneOptions {
   dawg: Dawg;
   difficulty: Difficulty;
-  boardSize: 3 | 5;
+  boardSize: 3 | 5 | 7;
   timeControl: TimeControlKind;
+  /** Имя и аватар игрока из профиля площадки (необязательно). */
+  playerName?: string;
+  playerAvatar?: Texture | null;
 }
 
 export interface GameSceneCallbacks {
@@ -51,7 +56,7 @@ const ERROR_TEXT: Record<MoveErrorCode, string> = {
 const AI_MOVE_DELAY_MS = 700;
 /** Сколько показывать ход бота (подсветка пути + слово в статусе). */
 const AI_REVEAL_MS = 900;
-const POP_MS = 180;
+const POP_MS = 320;
 const SHAKE_MS = 320;
 
 function formatClock(ms: number): string {
@@ -118,7 +123,8 @@ export class GameScene {
     this.inputLayer.eventMode = 'static';
     this.view.addChild(this.inputLayer);
 
-    this.hud = new HudView(app.screen.width);
+    this.hud = new HudView(app.screen.width, { human: options.playerName ?? 'Вы', opponent: 'Бот' });
+    if (options.playerAvatar !== undefined && options.playerAvatar !== null) this.hud.setAvatar(0, options.playerAvatar);
     this.view.addChild(this.hud);
 
     const initialLayout = computeGameLayout({
@@ -152,6 +158,7 @@ export class GameScene {
     const controlHeight = 46;
     this.btnCancel = new Button({
       caption: 'Отмена',
+      icon: 'undo_2',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -160,6 +167,7 @@ export class GameScene {
     });
     this.btnPass = new Button({
       caption: 'Пропуск',
+      icon: 'skip_forward',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -168,6 +176,7 @@ export class GameScene {
     });
     this.btnHistory = new Button({
       caption: 'История',
+      icon: 'scroll_text',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -176,6 +185,7 @@ export class GameScene {
     });
     this.btnOk = new Button({
       caption: 'OK',
+      icon: 'check',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().accent,
@@ -228,17 +238,17 @@ export class GameScene {
     }
     this.boardX = layout.boardX;
     this.boardView.position.set(layout.boardX, layout.boardY);
-    this.timerText.position.set(width / 2, layout.timerY);
-    this.wordPreview.position.set(width / 2, layout.wordPreviewY);
+    this.timerText.position.set(layout.timerX, layout.timerY);
+    this.wordPreview.position.set(layout.wordPreviewX, layout.wordPreviewY);
     const gap = layout.controlGap;
     const total = layout.controlWidth * 4 + gap * 3;
-    const startX = Math.floor((width - total) / 2);
+    const startX = layout.orientation === 'landscape-wide' ? layout.controlX : Math.floor((width - total) / 2);
     this.btnCancel.position.set(startX, layout.controlY);
     this.btnPass.position.set(startX + (layout.controlWidth + gap), layout.controlY);
     this.btnHistory.position.set(startX + (layout.controlWidth + gap) * 2, layout.controlY);
     this.btnOk.position.set(startX + (layout.controlWidth + gap) * 3, layout.controlY);
-    this.keyboard.setWidth(width);
-    this.keyboard.position.set(0, layout.keyboardY);
+    this.keyboard.setWidth(layout.keyboardWidth, layout.keyboardRows);
+    this.keyboard.position.set(layout.keyboardX, layout.keyboardY);
     // Оверлей конца партии перестраивается под новые размеры экрана.
     if (this.gameOverOverlay !== null) {
       this.view.removeChild(this.gameOverOverlay);
@@ -256,9 +266,9 @@ export class GameScene {
     this.dragActive = true;
     const phase = this.selection.snapshot.phase;
     if (phase === 'building') {
-      this.selection.extendPath(cell.row, cell.col);
+      if (this.selection.extendPath(cell.row, cell.col)) this.playSelect();
     } else {
-      this.selection.tapCell(cell.row, cell.col);
+      if (this.selection.tapCell(cell.row, cell.col)) sound.play('tap');
       this.keyboard.visible = this.selection.snapshot.phase === 'choosingLetter';
     }
     this.refresh();
@@ -270,6 +280,7 @@ export class GameScene {
     const cell = this.boardView.cellAt(local.x, local.y);
     if (cell === null) return;
     if (this.selection.extendPath(cell.row, cell.col)) {
+      this.playSelect();
       this.dragMoved = true;
       this.refresh();
     }
@@ -315,7 +326,8 @@ export class GameScene {
         this.boardView.setPulse(this.popCell.row, this.popCell.col, 1);
         this.popCell = null;
       } else {
-        const scale = 1 + 0.16 * Math.sin(Math.PI * t);
+        // Оттиск литеры: сильный «удар» (1.4×) с быстрой посадкой и лёгким отскоком.
+        const scale = 1 + 0.4 * Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 0.9);
         this.boardView.setPulse(this.popCell.row, this.popCell.col, scale);
       }
     } else if (shouldReduceMotion() && this.popCell !== null && now - this.popStart >= POP_MS) {
@@ -327,9 +339,15 @@ export class GameScene {
   private onLetter(letter: string): void {
     if (!this.controller.isHumanTurn || this.aiThinking || this.historyOpen) return;
     if (this.selection.chooseLetter(letter)) {
+      sound.play('place');
       this.keyboard.visible = false;
       this.refresh();
     }
+  }
+
+  /** Нота пентатоники растёт с длиной выбранной цепочки. */
+  private playSelect(): void {
+    sound.play('select', this.selection.snapshot.path.length - 1);
   }
 
   private onCancel(): void {
@@ -355,16 +373,19 @@ export class GameScene {
     if (!this.controller.isHumanTurn || this.aiThinking) return;
     const move = this.selection.toMove();
     if (move === null) {
+      sound.play('error');
       this.shakeBoard();
       this.refresh('Выделите слово, включая новую букву');
       return;
     }
     const result = this.controller.applyHumanMove(move);
     if (!result.ok) {
+      sound.play('error');
       this.shakeBoard();
       this.refresh(ERROR_TEXT[result.error ?? 'GAME_FINISHED']);
       return;
     }
+    sound.play('word', move.path.length);
     this.selection.reset();
     this.keyboard.visible = false;
     this.aiCell = null;
@@ -403,6 +424,7 @@ export class GameScene {
         this.aiCell = { row: outcome.cell.row, col: outcome.cell.col };
         this.aiPath = outcome.path;
         this.startPop(outcome.cell);
+        sound.play('opponent');
         this.refresh('Бот: ' + (outcome.word ?? '').toUpperCase() + ' (+' + (outcome.points ?? 0) + ')');
         this.aiTimer = setTimeout(() => {
           this.aiTimer = null;
@@ -477,7 +499,12 @@ export class GameScene {
     } else {
       status = 'Выделите слово и нажмите OK';
     }
-    this.hud.update(game.players[0]!.score, game.players[1]!.score, status);
+    this.hud.update(
+      game.players[0]!.score,
+      game.players[1]!.score,
+      status,
+      this.controller.isFinished ? null : this.controller.isHumanTurn ? 'human' : 'opponent',
+    );
     const word = snap.phase === 'building' && snap.path.length > 0 ? this.selection.currentWord() : '';
     this.wordPreview.text = word === '' ? '' : word.toUpperCase() + '  +' + snap.path.length;
     this.boardView.sync(
@@ -634,6 +661,10 @@ export class GameScene {
   private showGameOver(): void {
     if (this.gameOverShown) return;
     this.gameOverShown = true;
+    {
+      const [me, bot] = [this.controller.game.players[0]!.score, this.controller.game.players[1]!.score];
+      sound.play(me > bot ? 'win' : me < bot ? 'lose' : 'draw');
+    }
     this.timer.stop();
     // Результат фиксируется один раз, до показа оверлея (для локального рейтинга).
     this.callbacks.onGameOver?.(this.controller.game.players[0]!.score);

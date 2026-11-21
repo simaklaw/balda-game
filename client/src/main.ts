@@ -1,12 +1,16 @@
-import { Application, Container } from 'pixi.js';
+import { Application, Container, Graphics } from 'pixi.js';
 import { loadDawg } from './dict/dictionary';
-import { createAdapter, shouldShowInterstitial } from './platform';
+import { createAdapter, fetchProfile, shouldShowInterstitial } from './platform';
+import { parseLaunchRoom } from './platform/social';
+import { loadAvatar } from './ui/avatar';
+import type { Texture } from 'pixi.js';
 import type { LeaderboardRow } from './platform';
 import { addResult, parseLeaderboard, serializeLeaderboard, LEADERBOARD_KEY } from './game/leaderboard';
 import type { LeaderboardEntry } from './game/leaderboard';
 import { setTheme } from './theme';
-import { palette, themeKind } from './theme';
+import { palette, themeKind, pageBackground } from './theme';
 import { getPerformanceConfig, invalidateDeviceInfo } from './perf';
+import { installAudioUnlock } from './audio/Sound';
 import { GameScene } from './ui/GameScene';
 import type { GameSceneOptions } from './ui/GameScene';
 import { LobbyScene } from './ui/LobbyScene';
@@ -19,14 +23,34 @@ interface Scene {
 }
 
 /** Цвет фона страницы синхронизируется с темой, чтобы не было вспышек. */
-const cssBackground = (): string => '#' + palette().bg.toString(16).padStart(6, '0');
+const cssBackground = (): string => pageBackground();
 
 /** Уступить кадр: браузер отрисовывает #boot до тяжёлой синхронной работы. */
 const nextFrame = (): Promise<void> =>
   new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
+/** Шрифты лежат в public/fonts (OFL); при сбое остаётся запасной serif. */
+async function loadFonts(): Promise<void> {
+  const faces: Array<[string, string, FontFaceDescriptors]> = [
+    ['Plex Serif', 'PlexSerif-Bold.woff', { weight: '700' }],
+    ['Lora', 'Lora-Regular.woff', { weight: '400' }],
+    ['Lora', 'Lora-BoldItalic.woff', { weight: '700', style: 'italic' }],
+  ];
+  await Promise.all(
+    faces.map(async ([family, file, desc]) => {
+      try {
+        const face = new FontFace(family, `url(./fonts/${file})`, desc);
+        document.fonts.add(await face.load());
+      } catch {
+        /* запасной шрифт */
+      }
+    }),
+  );
+}
+
 async function bootstrap(): Promise<void> {
   const adapter = await createAdapter();
+  await loadFonts();
 
   try {
     const saved = await adapter.storage.get('balda.theme');
@@ -39,13 +63,40 @@ async function bootstrap(): Promise<void> {
   const app = new Application();
   await app.init({
     background: palette().bg,
+    backgroundAlpha: 0, // фон страницы (CSS-градиент) просвечивает через canvas
     resizeTo: window,
     antialias: perfConfig.antialias,
     resolution: perfConfig.resolution,
     autoDensity: perfConfig.autoDensity,
   });
   document.body.appendChild(app.canvas);
+  installAudioUnlock();
   document.body.style.background = cssBackground();
+  document.documentElement.style.background = cssBackground();
+  // Фон рисуется в Pixi (однотонная заливка + мягкое свечение из наложенных эллипсов),
+  // чтобы не зависеть от CSS-подложки страницы.
+  const backdrop = new Graphics();
+  const drawBackdrop = (): void => {
+    const w = app.screen.width;
+    const h = app.screen.height;
+    backdrop.clear();
+    backdrop.rect(0, 0, w, h).fill({ color: palette().bg });
+    const steps = 18;
+    for (let i = 0; i < steps; i++) {
+      const k = 1 - i / steps;
+      backdrop
+        .ellipse(w / 2, h * 0.38, w * 0.9 * k, h * 0.55 * k)
+        .fill({ color: palette().bgGlow, alpha: 0.07 });
+    }
+    // Тетрадная клетка: отсылка к бумажной «Балде», едва заметная.
+    const step = 26;
+    const ink = themeKind() === 'dark' ? 0xefe6d2 : 0x1b1712;
+    for (let x = step / 2; x < w; x += step) backdrop.rect(x, 0, 1, h).fill({ color: ink, alpha: 0.028 });
+    for (let y = step / 2; y < h; y += step) backdrop.rect(0, y, w, 1).fill({ color: ink, alpha: 0.028 });
+  };
+  drawBackdrop();
+  app.stage.addChildAt(backdrop, 0);
+  app.renderer.on('resize', drawBackdrop);
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
 
@@ -170,12 +221,26 @@ async function bootstrap(): Promise<void> {
     );
   };
 
-  let playerName = 'Игрок';
+  // Профиль площадки: имя сразу, аватар догружается и подхватывается следующей партией.
+  const profile = await fetchProfile(adapter);
+  const playerName = profile?.name ?? 'Игрок';
+  let playerAvatar: Texture | null = null;
+  void loadAvatar(profile?.avatarUrl).then((texture) => {
+    playerAvatar = texture;
+  });
+  // Комната из ссылки-приглашения: открываем лобби и входим один раз.
+  let launchRoom: string | null = null;
   try {
-    playerName = (await adapter.getPlayerName()) ?? 'Игрок';
+    launchRoom = parseLaunchRoom(window.location.href);
   } catch {
-    /* имя недоступно — играем под нейтральным именем */
+    launchRoom = null;
   }
+
+  const takeLaunchRoom = (): string | null => {
+    const code = launchRoom;
+    launchRoom = null;
+    return code;
+  };
 
   const showLobby = (): void => {
     setScene(
@@ -196,6 +261,7 @@ async function bootstrap(): Promise<void> {
             ),
         },
         adapter.id,
+        { social: adapter.social, launchRoom: takeLaunchRoom() },
       ),
     );
   };
@@ -233,10 +299,14 @@ async function bootstrap(): Promise<void> {
                 difficulty: selection.difficulty,
                 boardSize: selection.boardSize,
                 timeControl: selection.timeControl,
+                playerName,
+                playerAvatar,
               }),
             onThemeChange: () => {
               app.renderer.background.color = palette().bg;
+              drawBackdrop();
               document.body.style.background = cssBackground();
+  document.documentElement.style.background = cssBackground();
               void adapter.storage.set('balda.theme', themeKind());
               showMenu();
             },
@@ -249,7 +319,8 @@ async function bootstrap(): Promise<void> {
       );
     })();
   };
-  showMenu();
+  if (launchRoom !== null) showLobby();
+  else showMenu();
 
   // Сообщаем платформе, что игра полностью загрузилась (требование Яндекс Игр).
   await adapter.ready();

@@ -1,4 +1,5 @@
-import type { PlatformAdapter, PlatformId, PlatformStorage } from './types';
+import { buildInviteLink } from './social';
+import type { PlatformAdapter, PlatformId, PlatformProfile, PlatformSocial, PlatformStorage } from './types';
 
 /**
  * Минимальный интерфейс vk-bridge, который мы используем.
@@ -52,6 +53,58 @@ export class VKAdapter implements PlatformAdapter {
       return null;
     }
   }
+
+  async getProfile(): Promise<PlatformProfile | null> {
+    try {
+      const res = await this.bridge.send('VKWebAppGetUserInfo');
+      if (typeof res !== 'object' || res === null) return null;
+      const info = res as {
+        id?: unknown;
+        first_name?: unknown;
+        last_name?: unknown;
+        photo_200?: unknown;
+        photo_100?: unknown;
+      };
+      const name = [info.first_name, info.last_name]
+        .filter((part): part is string => typeof part === 'string' && part !== '')
+        .join(' ')
+        .trim();
+      const photo = [info.photo_200, info.photo_100].find(
+        (p): p is string => typeof p === 'string' && p.startsWith('https://'),
+      );
+      return {
+        id: typeof info.id === 'number' || typeof info.id === 'string' ? String(info.id) : null,
+        name: name !== '' ? name : 'Игрок',
+        avatarUrl: photo ?? null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Приглашение друга: сначала окно приглашения VK (VKWebAppShowInviteBox,
+   * requestKey = room<КОД> вернётся другу в vk_request_key), если недоступно —
+   * VKWebAppShare со ссылкой на комнату.
+   */
+  readonly social: PlatformSocial = {
+    invite: async (roomId) => {
+      try {
+        await this.bridge.send('VKWebAppShowInviteBox', { requestKey: 'room' + roomId });
+        return true;
+      } catch {
+        /* пробуем поделиться ссылкой */
+      }
+      try {
+        await this.bridge.send('VKWebAppShare', {
+          link: buildInviteLink(typeof window !== 'undefined' ? window.location.href : 'https://localhost/', roomId),
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
 
   async showInterstitial(): Promise<void> {
     await this.showNativeAd('interstitial');
