@@ -28,59 +28,64 @@ export interface Palette {
   /** Рама доски (орех) и её кромка (латунь). */
   frame: number;
   frameEdge: number;
+  /** Перламутровый отлив: три тона градиента (шампань → розовое золото → лаванда). */
+  sheen: readonly [number, number, number];
 }
 
 export type ThemeKind = 'dark' | 'light';
 
 export const DARK: Palette = {
-  // «Типографская касса»: чёрная краска, бумага, киноварь, сталь.
-  bg: 0x0e0c0a,
-  panel: 0x1a1612,
-  panelBorder: 0x3d352b,
-  accent: 0xc8402b,
-  accentDark: 0x8c2a1b,
-  ai: 0xb9ae95,
-  cell: 0xece3cf,
-  cellBorder: 0xcfc3a6,
-  cellEmpty: 0x1c1814,
-  cellNew: 0xd2452e,
-  cellPath: 0xe0583f,
-  text: 0xefe6d2,
-  textDim: 0x9d927f,
-  letterText: 0x14110e,
-  danger: 0xff7a5c,
-  success: 0x9bbd7a,
-  player: 0xd9503a,
-  gold: 0xe0583f,
-  tileEdge: 0xa89b7c,
-  bgGlow: 0x211b15,
-  frame: 0x2b2620,
-  frameEdge: 0x7a705e,
+  // «Ночная типография»: чернильный баклажан, слоновая бумага, шампань, рубин и перламутр.
+  bg: 0x0b0910,
+  panel: 0x17121d,
+  panelBorder: 0x4a3b57,
+  accent: 0xa51f40,
+  accentDark: 0x6a1129,
+  ai: 0xbba9dc,
+  cell: 0xf2e9d7,
+  cellBorder: 0xd9cbb0,
+  cellEmpty: 0x15101a,
+  cellNew: 0xc72c4e,
+  cellPath: 0xdcb46c,
+  text: 0xf3eadb,
+  textDim: 0xa59bb0,
+  letterText: 0x17121a,
+  danger: 0xff8493,
+  success: 0x93d4ac,
+  player: 0xe6c98a,
+  gold: 0xe6c98a,
+  tileEdge: 0xb4a283,
+  bgGlow: 0x2b1733,
+  frame: 0x241a2b,
+  frameEdge: 0xbb9c62,
+  sheen: [0xf2d89a, 0xe9a8bb, 0xb7a2ea],
 };
 
 export const LIGHT: Palette = {
-  bg: 0xe2d8c0,
-  panel: 0xf6efde,
-  panelBorder: 0xbfb08e,
-  accent: 0xb8321f,
-  accentDark: 0x8a2316,
-  ai: 0x3b3631,
-  cell: 0xfbf6e8,
-  cellBorder: 0xd8cca9,
-  cellEmpty: 0x2a2520,
-  cellNew: 0xb8321f,
-  cellPath: 0xc9402b,
-  text: 0x1b1712,
-  textDim: 0x6e6454,
-  letterText: 0x14110e,
-  danger: 0xb6321f,
-  success: 0x4f7a3a,
-  player: 0xb8321f,
-  gold: 0xb8321f,
-  tileEdge: 0xc2b48f,
-  bgGlow: 0xf0e8d3,
-  frame: 0x4a4238,
-  frameEdge: 0x8a7d66,
+  // Дневная версия: жемчуг и шампань, глубокий рубин и аметист для акцентов.
+  bg: 0xe8dfd6,
+  panel: 0xfbf6ee,
+  panelBorder: 0xcdb9a3,
+  accent: 0x9d1d3d,
+  accentDark: 0x6c1229,
+  ai: 0x5b4a7c,
+  cell: 0xfffaf0,
+  cellBorder: 0xdccfb6,
+  cellEmpty: 0x2b2230,
+  cellNew: 0xa81f40,
+  cellPath: 0xb98a3a,
+  text: 0x1e1721,
+  textDim: 0x76697c,
+  letterText: 0x17121a,
+  danger: 0xa81f40,
+  success: 0x3f7a55,
+  player: 0x9d1d3d,
+  gold: 0xa9803a,
+  tileEdge: 0xc7b793,
+  bgGlow: 0xf8f0ea,
+  frame: 0x3b2d40,
+  frameEdge: 0xaa8c55,
+  sheen: [0xd9b36a, 0xd68aa2, 0x8f78c9],
 };
 
 let current: Palette = DARK;
@@ -128,4 +133,15 @@ const hex = (c: number): string => '#' + c.toString(16).padStart(6, '0');
 export function pageBackground(): string {
   const p = current;
   return 'radial-gradient(ellipse at 50% 38%, ' + hex(p.bgGlow) + ' 0%, ' + hex(p.bg) + ' 70%)';
+}
+
+/** Линейная интерполяция двух цветов, t в [0, 1]. */
+export function mix(a: number, b: number, t: number): number {
+  const k = Math.min(1, Math.max(0, t));
+  const ch = (shift: number): number => {
+    const x = (a >> shift) & 255;
+    const y = (b >> shift) & 255;
+    return Math.round(x + (y - x) * k);
+  };
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }

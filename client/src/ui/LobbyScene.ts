@@ -92,6 +92,8 @@ export class LobbyScene {
     const buttonWidth = Math.min(260, width - 40);
     this.btnQuick = new Button({
       caption: 'Быстрая игра',
+      sfx: 'play',
+      shimmer: true,
       width: buttonWidth,
       height: 54,
       fontSize: 20,
@@ -99,6 +101,7 @@ export class LobbyScene {
     });
     this.btnCreate = new Button({
       caption: 'Создать комнату',
+      sfx: 'confirm',
       width: buttonWidth,
       height: 48,
       color: palette().panel,
@@ -107,6 +110,7 @@ export class LobbyScene {
     });
     this.btnJoin = new Button({
       caption: 'Войти по коду',
+      sfx: 'open',
       width: buttonWidth,
       height: 48,
       color: palette().panel,
@@ -115,6 +119,7 @@ export class LobbyScene {
     });
     this.btnProfile = new Button({
       caption: 'Профиль',
+      sfx: 'open',
       width: buttonWidth,
       height: 48,
       color: palette().panel,
@@ -123,6 +128,7 @@ export class LobbyScene {
     });
     this.btnBack = new Button({
       caption: 'Назад',
+      sfx: 'back',
       width: buttonWidth,
       height: 44,
       color: palette().panel,
@@ -133,6 +139,7 @@ export class LobbyScene {
     });
     this.btnInvite = new Button({
       caption: 'Пригласить друга',
+      sfx: 'confirm',
       width: buttonWidth,
       height: 48,
       fontSize: 17,
@@ -412,6 +419,7 @@ export class LobbyScene {
 
     const btnClose = new Button({
       caption: 'Закрыть',
+      sfx: 'back',
       width: Math.min(200, panelWidth - 40),
       height: 48,
       onTap: () => this.closeProfileOverlay(),
@@ -467,6 +475,7 @@ export class LobbyScene {
     const buttonWidth = Math.min(200, width - 40);
     const btnOk = new Button({
       caption: 'Войти',
+      sfx: 'confirm',
       width: buttonWidth,
       height: 48,
       onTap: () => {
@@ -479,6 +488,7 @@ export class LobbyScene {
     overlay.addChild(btnOk);
     const btnCancel = new Button({
       caption: 'Отмена',
+      sfx: 'cancel',
       width: buttonWidth,
       height: 48,
       color: palette().panel,

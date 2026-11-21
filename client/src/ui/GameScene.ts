@@ -159,6 +159,7 @@ export class GameScene {
     const controlHeight = 46;
     this.btnCancel = new Button({
       caption: 'Отмена',
+      sfx: 'cancel',
       icon: 'undo_2',
       width: this.controlWidth,
       height: controlHeight,
@@ -168,6 +169,7 @@ export class GameScene {
     });
     this.btnPass = new Button({
       caption: 'Пропуск',
+      sfx: 'skip',
       icon: 'skip_forward',
       width: this.controlWidth,
       height: controlHeight,
@@ -177,6 +179,7 @@ export class GameScene {
     });
     this.btnHistory = new Button({
       caption: 'История',
+      sfx: 'open',
       icon: 'scroll_text',
       width: this.controlWidth,
       height: controlHeight,
@@ -186,6 +189,7 @@ export class GameScene {
     });
     this.btnOk = new Button({
       caption: 'OK',
+      sfx: 'confirm',
       icon: 'check',
       width: this.controlWidth,
       height: controlHeight,
@@ -638,6 +642,7 @@ export class GameScene {
     }
     const btnClose = new Button({
       caption: 'Закрыть',
+      sfx: 'back',
       width: panelWidth - 30,
       height: 46,
       color: palette().panel,
@@ -731,6 +736,8 @@ export class GameScene {
     const buttonWidth = panelWidth - 30;
     const btnAgain = new Button({
       caption: 'Ещё раз',
+      sfx: 'play',
+      shimmer: true,
       width: buttonWidth,
       height: 48,
       fontSize: 20,
@@ -742,6 +749,7 @@ export class GameScene {
     overlay.addChild(btnAgain);
     const btnMenu = new Button({
       caption: 'Меню',
+      sfx: 'back',
       width: buttonWidth,
       height: 48,
       fontSize: 20,
