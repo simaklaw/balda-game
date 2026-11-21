@@ -42,6 +42,11 @@ for (let y = 820; y > 450; y -= 10) {
 }
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-light.png` });
+await page.evaluate(() => { const s = window.__scene; try { const g = s.controller.game; g.players[0].score = 7; g.winner = 0; } catch (e) {} s.showGameOver(); });
+await page.waitForTimeout(350);
+await page.screenshot({ path: `shots/${P}over-scramble.png` });
+await page.waitForTimeout(2500);
+await page.screenshot({ path: `shots/${P}over-final.png` });
 await ctx.close();
 {
   const lctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
