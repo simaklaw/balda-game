@@ -166,6 +166,7 @@ export class OnlineGameScene {
     const controlHeight = 46;
     this.btnCancel = new Button({
       caption: 'Отмена',
+      sfx: 'cancel',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -174,6 +175,7 @@ export class OnlineGameScene {
     });
     this.btnPass = new Button({
       caption: 'Пропуск',
+      sfx: 'skip',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -182,6 +184,7 @@ export class OnlineGameScene {
     });
     this.btnOk = new Button({
       caption: 'OK',
+      sfx: 'confirm',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().accent,
@@ -189,6 +192,7 @@ export class OnlineGameScene {
     });
     this.btnResign = new Button({
       caption: 'Сдаться',
+      sfx: 'cancel',
       width: this.controlWidth,
       height: controlHeight,
       color: palette().panel,
@@ -577,6 +581,7 @@ export class OnlineGameScene {
     }
     const btnMenu = new Button({
       caption: 'В меню',
+      sfx: 'back',
       width: panelWidth - 44,
       height: 48,
       fontSize: 20,

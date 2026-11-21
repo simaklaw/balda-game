@@ -223,9 +223,11 @@ export class MenuScene {
       this.hint,
     );
 
-    for (const option of DIFFICULTIES) {
+    DIFFICULTIES.forEach((option, index) => {
       const button = new Button({
         caption: option.caption,
+        sfx: 'choose',
+        sfxArg: index,
         width: ROW_WIDTH,
         height: 46,
         color: palette().panel,
@@ -236,28 +238,30 @@ export class MenuScene {
       });
       this.difficultyButtons.push(button);
       this.view.addChild(button);
-    }
-    for (const option of BOARD_SIZES) {
+    });
+    BOARD_SIZES.forEach((option, index) => {
       const button = new Button({
         caption: option.caption,
+        sfx: 'choose',
+        sfxArg: index,
         width: ROW_WIDTH,
         height: 46,
         color: palette().panel,
         onTap: () => {
           if (option.disabled) return;
-          if (option.id === 3 || option.id === 5) {
-            this.boardSize = option.id;
-            this.updateSelectionStyles();
-          }
+          this.boardSize = option.id;
+          this.updateSelectionStyles();
         },
       });
       if (option.disabled) button.setEnabled(false);
       this.sizeButtons.push(button);
       this.view.addChild(button);
-    }
-    for (const option of TIME_CONTROLS) {
+    });
+    TIME_CONTROLS.forEach((option, index) => {
       const button = new Button({
         caption: option.caption,
+        sfx: 'choose',
+        sfxArg: index,
         width: TIME_ROW_WIDTH,
         height: 46,
         color: palette().panel,
@@ -269,7 +273,7 @@ export class MenuScene {
       });
       this.timeButtons.push(button);
       this.view.addChild(button);
-    }
+    });
 
     this.btnTheme = new Button({
       caption: 'Тема',
@@ -278,8 +282,10 @@ export class MenuScene {
       height: 44,
       color: palette().panel,
       fontSize: 15,
+      sfx: 'none',
       onTap: () => {
         const next = themeKind() === 'dark' ? 'light' : 'dark';
+        sound.play('toggle', next === 'light' ? 1 : 0);
         setTheme(next);
         try {
           localStorage.setItem('balda.theme', next);
@@ -302,13 +308,14 @@ export class MenuScene {
       onTap: () => {
         sound.setEnabled(!sound.enabled);
         this.btnSound.setIcon(sound.enabled ? 'volume_2' : 'volume_x');
-        if (sound.enabled) sound.play('word', 4);
+        if (sound.enabled) sound.play('toggle', 1);
       },
     });
     this.view.addChild(this.btnSound);
 
     this.btnRules = new Button({
       caption: 'Правила',
+      sfx: 'open',
       icon: 'book_open',
       width: 200,
       height: 44,
@@ -320,6 +327,7 @@ export class MenuScene {
 
     this.btnLeaderboard = new Button({
       caption: 'Рейтинг',
+      sfx: 'open',
       icon: 'trophy',
       width: 200,
       height: 44,
@@ -331,6 +339,7 @@ export class MenuScene {
 
     this.btnOnline = new Button({
       caption: 'Онлайн',
+      sfx: 'open',
       icon: 'globe',
       width: 220,
       height: 44,
@@ -344,6 +353,8 @@ export class MenuScene {
 
     this.btnPlay = new Button({
       caption: 'Играть',
+      sfx: 'play',
+      shimmer: true,
       icon: 'play',
       width: 220,
       height: 56,
@@ -417,6 +428,7 @@ export class MenuScene {
       .stroke({ width: 2, color: palette().panelBorder });
     const btnClose = new Button({
       caption: 'Понятно',
+      sfx: 'back',
       width: panelWidth - 44,
       height: 46,
       color: palette().accent,
@@ -506,6 +518,7 @@ export class MenuScene {
     }
     const btnClose = new Button({
       caption: 'Закрыть',
+      sfx: 'back',
       width: panelWidth - 30,
       height: 46,
       color: palette().panel,
