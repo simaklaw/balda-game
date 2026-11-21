@@ -1,4 +1,4 @@
-import { Application, Container } from 'pixi.js';
+import { Application, Container, Graphics } from 'pixi.js';
 import { loadDawg } from './dict/dictionary';
 import { createAdapter, shouldShowInterstitial } from './platform';
 import type { LeaderboardRow } from './platform';
@@ -70,6 +70,25 @@ async function bootstrap(): Promise<void> {
   installAudioUnlock();
   document.body.style.background = cssBackground();
   document.documentElement.style.background = cssBackground();
+  // Фон рисуется в Pixi (однотонная заливка + мягкое свечение из наложенных эллипсов),
+  // чтобы не зависеть от CSS-подложки страницы.
+  const backdrop = new Graphics();
+  const drawBackdrop = (): void => {
+    const w = app.screen.width;
+    const h = app.screen.height;
+    backdrop.clear();
+    backdrop.rect(0, 0, w, h).fill({ color: palette().bg });
+    const steps = 18;
+    for (let i = 0; i < steps; i++) {
+      const k = 1 - i / steps;
+      backdrop
+        .ellipse(w / 2, h * 0.38, w * 0.9 * k, h * 0.55 * k)
+        .fill({ color: palette().bgGlow, alpha: 0.07 });
+    }
+  };
+  drawBackdrop();
+  app.stage.addChildAt(backdrop, 0);
+  app.renderer.on('resize', drawBackdrop);
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
 
@@ -260,6 +279,7 @@ async function bootstrap(): Promise<void> {
               }),
             onThemeChange: () => {
               app.renderer.background.color = palette().bg;
+              drawBackdrop();
               document.body.style.background = cssBackground();
   document.documentElement.style.background = cssBackground();
               void adapter.storage.set('balda.theme', themeKind());

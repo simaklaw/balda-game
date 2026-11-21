@@ -174,7 +174,11 @@ export class BoardView extends Container {
         const letter = isNew ? (highlight.previewLetter ?? '') : get(row, col);
         view.text = letter.toUpperCase();
         view.visible = letter !== '';
-        view.style.fill = isNew ? shade(palette().cellNew, -0.35) : palette().letterText;
+        view.style.fill = isNew
+          ? shade(palette().cellNew, -0.35)
+          : inPath(row, col)
+            ? palette().cell
+            : palette().letterText;
         const { x, y } = this.cellOrigin(row, col);
         view.position.set(x + size / 2, y + size / 2 - lip / 2);
 
@@ -192,8 +196,8 @@ export class BoardView extends Container {
           overlay.roundRect(x, y, size, size - lip, radius).fill({ color: palette().cell });
           overlay.roundRect(x, y, size, size - lip, radius).stroke({ width: 3, color: palette().cellNew });
         } else if (inPath(row, col)) {
-          overlay.roundRect(x, y, size, size - lip, radius).fill({ color: gold, alpha: 0.38 });
-          overlay.roundRect(x, y, size, size - lip, radius).stroke({ width: 2.5, color: gold });
+          overlay.roundRect(x, y, size, size - lip, radius).fill({ color: shade(gold, -0.12) });
+          overlay.roundRect(x + 4, y + 4, size - 8, size - lip - 8, 1.5).stroke({ width: 1, color: palette().cell, alpha: 0.5 });
         }
         if (highlight.aiCell !== null && highlight.aiCell.row === row && highlight.aiCell.col === col && !isNew) {
           overlay.roundRect(x - 1, y - 1, size + 2, size - lip + 2, radius).stroke({ width: 3.5, color: palette().ai });
