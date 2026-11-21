@@ -42,4 +42,18 @@ for (let y = 820; y > 450; y -= 10) {
 }
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-light.png` });
+{
+  const lctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const lp = await lctx.newPage();
+  await lp.goto(url);
+  await lp.waitForTimeout(6000);
+  await lp.screenshot({ path: `shots/${P}land-menu.png` });
+  for (let y = 380; y > 100; y -= 12) {
+    await lp.mouse.click(422, y);
+    await lp.waitForTimeout(500);
+    if (await lp.evaluate(() => !!window.__scene)) break;
+  }
+  await lp.waitForTimeout(1500);
+  await lp.screenshot({ path: `shots/${P}land-game.png` });
+}
 await browser.close();
