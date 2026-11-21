@@ -14,7 +14,8 @@ import { computeGameLayout, keyboardMetricsFor } from './layout';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
 import { shouldReduceMotion } from '../perf';
-import { FONT_FAMILY, palette } from '../theme';
+import { ScrambleText } from './ScrambleText';
+import { DISPLAY_FONT, FONT_FAMILY, palette } from '../theme';
 
 export interface OnlineGameSceneCallbacks {
   onMenu: () => void;
@@ -536,12 +537,20 @@ export class OnlineGameScene {
     const panel = new Graphics();
     panel.roundRect(panelX, panelY, panelWidth, panelHeight, 16).fill({ color: palette().panel });
     overlay.addChild(panel);
-    const title = new Text({
-      text: over.title,
-      style: { fontFamily: FONT_FAMILY, fontSize: 30, fill: titleColor, fontWeight: '700' },
-    });
-    title.anchor.set(0.5, 0);
-    title.position.set(width / 2, panelY + 24);
+    const title = new ScrambleText(
+      {
+        text: over.title,
+        fontFamily: DISPLAY_FONT,
+        italic: true,
+        fontSize: 30,
+        maxWidth: panelWidth - 28,
+        color: titleColor,
+        dimColor: palette().textDim,
+        caretColor: titleColor,
+      },
+      this.app.ticker,
+    );
+    title.position.set(width / 2, panelY + 44);
     overlay.addChild(title);
     const score = msg.scores[you] ?? 0;
     const opponentScore = msg.scores[you === 0 ? 1 : 0] ?? 0;

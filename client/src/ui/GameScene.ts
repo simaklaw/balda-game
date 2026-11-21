@@ -15,7 +15,8 @@ import { HudView } from './HudView';
 import { computeGameLayout, keyboardMetricsFor } from './layout';
 import { KeyboardView } from './KeyboardView';
 import { safeInsets } from './safeArea';
-import { FONT_FAMILY, palette } from '../theme';
+import { ScrambleText } from './ScrambleText';
+import { DISPLAY_FONT, FONT_FAMILY, palette } from '../theme';
 import { shouldReduceMotion } from '../perf';
 
 export interface GameSceneOptions {
@@ -696,11 +697,19 @@ export class GameScene {
     const over = gameOverText(game.winner, game.endReason);
     const titleColor =
       over.tone === 'success' ? palette().success : over.tone === 'danger' ? palette().danger : palette().text;
-    const titleText = new Text({
-      text: over.title,
-      style: { fontFamily: FONT_FAMILY, fontSize: 32, fill: titleColor },
-    });
-    titleText.anchor.set(0.5);
+    const titleText = new ScrambleText(
+      {
+        text: over.title,
+        fontFamily: DISPLAY_FONT,
+        italic: true,
+        fontSize: 32,
+        maxWidth: panelWidth - 28,
+        color: titleColor,
+        dimColor: palette().textDim,
+        caretColor: titleColor,
+      },
+      this.app.ticker,
+    );
     titleText.position.set(width / 2, panelY + 60);
     overlay.addChild(titleText);
     const scoreText = new Text({

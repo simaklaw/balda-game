@@ -20,7 +20,7 @@ const REASON_TEXT: Record<Exclude<EndReason, null>, string> = {
  * 0 — сам игрок (победа), 1 — соперник (поражение), null — ничья.
  */
 export function gameOverText(winner: number | null, endReason: EndReason): GameOverText {
-  const title = winner === null ? 'Ничья' : winner === 0 ? 'Победа!' : 'Поражение';
+  const title = winner === null ? 'Ничья' : winner === 0 ? 'Вы одержали победу' : 'Вы потерпели поражение';
   const tone: GameOverText['tone'] =
     winner === null ? 'neutral' : winner === 0 ? 'success' : 'danger';
   const reason = endReason === null ? '' : REASON_TEXT[endReason];
