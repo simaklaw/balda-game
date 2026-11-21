@@ -11,7 +11,7 @@ import { sound } from '../audio/Sound';
 
 export interface MenuSelection {
   difficulty: Difficulty;
-  boardSize: 3 | 5;
+  boardSize: 3 | 5 | 7;
   timeControl: TimeControlKind;
 }
 
@@ -30,7 +30,7 @@ const DIFFICULTIES: readonly { id: Difficulty; caption: string }[] = [
 const BOARD_SIZES: readonly { id: 3 | 5 | 7; caption: string; disabled: boolean }[] = [
   { id: 3, caption: '3×3', disabled: false },
   { id: 5, caption: '5×5', disabled: false },
-  { id: 7, caption: '7×7', disabled: true },
+  { id: 7, caption: '7×7', disabled: false },
 ];
 
 const TIME_CONTROLS: readonly { id: TimeControlKind; caption: string }[] = [
@@ -120,7 +120,7 @@ export class MenuScene {
   /** Строка о словаре в подвале меню («Словарь: 49 312 слов» / «Словарь: ограниченный»). */
   private readonly dictInfo: string;
   private difficulty: Difficulty = 'medium';
-  private boardSize: 3 | 5 = 5;
+  private boardSize: 3 | 5 | 7 = 7;
   private timeControl: TimeControlKind = 'classic';
 
   constructor(
@@ -226,7 +226,8 @@ export class MenuScene {
     }
 
     this.btnTheme = new Button({
-      caption: themeKind() === 'dark' ? 'Тёмная' : 'Светлая',
+      caption: 'Тема',
+      icon: themeKind() === 'dark' ? 'moon' : 'sun',
       width: 94,
       height: 44,
       color: palette().panel,
@@ -245,7 +246,8 @@ export class MenuScene {
     this.view.addChild(this.btnTheme);
 
     this.btnSound = new Button({
-      caption: sound.enabled ? 'Звук: вкл' : 'Звук: выкл',
+      caption: 'Звук',
+      icon: sound.enabled ? 'volume_2' : 'volume_x',
       width: 94,
       height: 44,
       color: palette().panel,
@@ -253,7 +255,7 @@ export class MenuScene {
       sfx: 'none',
       onTap: () => {
         sound.setEnabled(!sound.enabled);
-        this.btnSound.setCaption(sound.enabled ? 'Звук: вкл' : 'Звук: выкл');
+        this.btnSound.setIcon(sound.enabled ? 'volume_2' : 'volume_x');
         if (sound.enabled) sound.play('word', 4);
       },
     });
@@ -261,6 +263,7 @@ export class MenuScene {
 
     this.btnRules = new Button({
       caption: 'Правила',
+      icon: 'book_open',
       width: 200,
       height: 44,
       color: palette().panel,
@@ -271,6 +274,7 @@ export class MenuScene {
 
     this.btnLeaderboard = new Button({
       caption: 'Рейтинг',
+      icon: 'trophy',
       width: 200,
       height: 44,
       color: palette().panel,
@@ -281,6 +285,7 @@ export class MenuScene {
 
     this.btnOnline = new Button({
       caption: 'Онлайн',
+      icon: 'globe',
       width: 220,
       height: 44,
       color: palette().panel,
@@ -293,6 +298,7 @@ export class MenuScene {
 
     this.btnPlay = new Button({
       caption: 'Играть',
+      icon: 'play',
       width: 220,
       height: 56,
       fontSize: 24,

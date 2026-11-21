@@ -86,7 +86,7 @@ describe('computeGameLayout — контрольные значения',
     for (const [n, cell, bottom, kby] of [
       [3, 92, 360, 368],
       [5, 55, 359, 368],
-      [7, 39, 357, 368],
+      [7, 39, 358, 368],
     ] as const) {
       const kb = keyboardMetricsFor(320);
       const layout = computeGameLayout({

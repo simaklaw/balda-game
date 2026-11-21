@@ -85,6 +85,11 @@ async function bootstrap(): Promise<void> {
         .ellipse(w / 2, h * 0.38, w * 0.9 * k, h * 0.55 * k)
         .fill({ color: palette().bgGlow, alpha: 0.07 });
     }
+    // Тетрадная клетка: отсылка к бумажной «Балде», едва заметная.
+    const step = 26;
+    const ink = themeKind() === 'dark' ? 0xefe6d2 : 0x1b1712;
+    for (let x = step / 2; x < w; x += step) backdrop.rect(x, 0, 1, h).fill({ color: ink, alpha: 0.028 });
+    for (let y = step / 2; y < h; y += step) backdrop.rect(0, y, w, 1).fill({ color: ink, alpha: 0.028 });
   };
   drawBackdrop();
   app.stage.addChildAt(backdrop, 0);

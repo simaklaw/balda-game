@@ -207,12 +207,14 @@ export const START_WORDS: Record<number, readonly string[]> = {
 
 /** Случайное стартовое слово для поля size; для неизвестного размера — ошибка. */
 export function pickStartWord(size: number, rnd: () => number = Math.random): string {
-  const pool = START_WORDS[size];
-  if (pool === undefined || pool.length === 0) {
+  const own = START_WORDS[size];
+  if (own === undefined || own.length === 0) {
     throw new Error('Нет стартовых слов для поля ' + size + '×' + size);
   }
+  // На 7×7 слово не обязано занимать всю строку: берём и 7-, и 5-буквенные (по центру).
+  const pool = size === 7 ? [...own, ...(START_WORDS[5] ?? [])] : own;
   const word = pool[Math.floor(rnd() * pool.length)]!;
-  if (word.length !== size) {
+  if (word.length > size) {
     throw new Error('Стартовое слово "' + word + '" не подходит для поля ' + size + '×' + size);
   }
   return word;

@@ -45,7 +45,7 @@ describe('parseLeaderboard', () => {
       { score: 'много' },
       null,
       makeRaw({ score: 9, difficulty: 'nightmare' }),
-      makeRaw({ score: 3, boardSize: 7 }),
+      makeRaw({ score: 3, boardSize: 9 }),
       makeRaw({ score: 4, timeControl: 'turbo' }),
       makeRaw({ score: 2, date: 'вчера' }),
     ]);

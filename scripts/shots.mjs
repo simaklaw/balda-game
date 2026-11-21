@@ -21,12 +21,12 @@ await page.waitForTimeout(1500);
 await page.screenshot({ path: `shots/${P}game-dark.png` });
 const flow = async (tag) => {
   const call = (code) => page.evaluate(code);
-  await call(() => { const s = window.__scene; s.selection.tapCell(1, 2); s.keyboard.visible = s.selection.snapshot.phase === 'choosingLetter'; s.refresh(); });
+  await call(() => { const s = window.__scene; s.selection.tapCell(2, 3); s.keyboard.visible = s.selection.snapshot.phase === 'choosingLetter'; s.refresh(); });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `shots/${P}${tag}-keyboard.png` });
   await call(() => { const s = window.__scene; s.onLetter('к'); });
   await page.waitForTimeout(400);
-  await call(() => { const s = window.__scene; s.selection.extendPath(2, 2); s.selection.extendPath(2, 1); s.refresh(); });
+  await call(() => { const s = window.__scene; s.selection.extendPath(3, 3); s.selection.extendPath(3, 2); s.refresh(); });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `shots/${P}${tag}-path.png` });
 };

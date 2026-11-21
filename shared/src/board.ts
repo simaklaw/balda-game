@@ -29,8 +29,8 @@ export class Board {
     this.cells = new Array<string>(size * size).fill('');
     if (initialWord !== undefined) {
       const word = normalizeWord(initialWord);
-      if (word.length !== size) {
-        throw new Error(`Initial word must have ${size} letters for a ${size}x${size} board`);
+      if (word.length < 3 || word.length > size) {
+        throw new Error(`Initial word must have 3..${size} letters for a ${size}x${size} board`);
       }
       for (const ch of word) {
         if (!isCyrillicLetter(ch)) {
@@ -38,7 +38,8 @@ export class Board {
         }
       }
       const row = Math.floor(size / 2);
-      for (let i = 0; i < size; i++) this.set(row, i, word[i]!);
+      const offset = Math.floor((size - word.length) / 2);
+      for (let i = 0; i < word.length; i++) this.set(row, offset + i, word[i]!);
     }
   }
 

@@ -24,20 +24,38 @@ export function findAiMove(
   usedWords: Set<string>,
   difficulty: Difficulty,
   rng: () => number = Math.random,
+  /** Бюджет времени поиска, мс (для больших полей); по умолчанию — без ограничения до 6×6. */
+  budgetMs: number = board.size > 5 ? 600 : Number.POSITIVE_INFINITY,
 ): AiCandidate | null {
+  const started = Date.now();
+  let timedOut = false;
   const byWord = new Map<string, AiCandidate>();
   const root = dawg.rootId;
 
-  for (let row = 0; row < board.size; row++) {
-    for (let col = 0; col < board.size; col++) {
-      if (!board.isEmpty(row, col)) continue;
-      const cell: CellPos = { row, col };
+  // Порядок клеток перемешан, чтобы обрыв по времени не смещал выбор в верх доски.
+  const order: CellPos[] = [];
+  for (let r = 0; r < board.size; r++) for (let c = 0; c < board.size; c++) order.push({ row: r, col: c });
+  if (budgetMs !== Number.POSITIVE_INFINITY) {
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [order[i], order[j]] = [order[j]!, order[i]!];
+    }
+  }
+
+  for (const cell of order) {
+    {
+      const { row, col } = cell;
+      if (timedOut || !board.isEmpty(row, col)) continue;
       const hasNeighbor = board
         .neighbors(row, col, config.allowDiagonal)
         .some((n) => !board.isEmpty(n.row, n.col));
       if (!hasNeighbor) continue;
 
       for (const letter of CYRILLIC_LETTERS) {
+        if (Date.now() - started > budgetMs && byWord.size > 0) {
+          timedOut = true;
+          break;
+        }
         const get = (pos: CellPos): string =>
           pos.row === cell.row && pos.col === cell.col ? letter : board.get(pos.row, pos.col);
 
