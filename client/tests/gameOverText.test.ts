@@ -11,13 +11,13 @@ describe('gameOverText', () => {
 
   it('победа игрока', () => {
     const t = gameOverText(0, 'board_full');
-    expect(t.title).toBe('Победа!');
+    expect(t.title).toBe('Вы одержали победу');
     expect(t.tone).toBe('success');
   });
 
   it('поражение с причиной', () => {
     const t = gameOverText(1, 'skip_limit');
-    expect(t.title).toBe('Поражение');
+    expect(t.title).toBe('Вы потерпели поражение');
     expect(t.tone).toBe('danger');
     expect(t.reason).toBe('три пропуска подряд');
   });
